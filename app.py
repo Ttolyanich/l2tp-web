@@ -90,11 +90,22 @@ if os.getenv("ADMIN_GROUP"):
 elif os.getenv("L2TP_ADMIN_GROUP"):
     config["admin_group"] = os.getenv("L2TP_ADMIN_GROUP").strip()
 
-# Auto-generate secret_key if default or empty
+# Auto-generate and persist secret_key if default or empty
 if config.get("secret_key") == "default-secret-key-32-chars-long-please-change" or not config.get("secret_key"):
     config["secret_key"] = secrets.token_hex(16)
+    # Persist secret_key so all Gunicorn workers share the same session key
+    try:
+        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Warning: Could not persist generated secret_key: {e}")
 
 app.secret_key = config["secret_key"]
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax'
+)
 
 # Auto-detect public IP if not explicitly set
 if not config["public_ip"]:
@@ -254,7 +265,7 @@ def sync_node_user(username, central_role="operator", display_name=None, auth_so
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if not existing:
-            initial_role = "admin" if (is_explicit_admin or central_role == "admin") else "operator"
+            initial_role = "admin" if (is_explicit_admin or central_role == "admin") else (central_role or "operator")
             cursor.execute(
                 "INSERT INTO users (username, role, display_name, auth_source, last_login) VALUES (?, ?, ?, ?, ?)",
                 (clean_user, initial_role, disp_name, auth_source, now_str)
@@ -265,6 +276,9 @@ def sync_node_user(username, central_role="operator", display_name=None, auth_so
             effective_role = existing['role']
             if is_explicit_admin:
                 effective_role = "admin"
+            elif central_role in ("admin", "operator", "viewer"):
+                effective_role = central_role
+
             cursor.execute(
                 "UPDATE users SET role = ?, display_name = ?, last_login = ? WHERE id = ?",
                 (effective_role, disp_name or existing['display_name'], now_str, existing['id'])
@@ -283,6 +297,20 @@ def login_required(f):
             if request.is_json or request.path.startswith('/api/'):
                 return jsonify({"error": "Unauthorized"}), 401
             return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def operator_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("logged_in"):
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({"error": "Unauthorized"}), 401
+            return redirect(url_for('login'))
+        if session.get("role") not in ("admin", "operator"):
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({"error": "Forbidden: Требуются права Оператора или Администратора"}), 403
+            abort(403)
         return f(*args, **kwargs)
     return decorated_function
 
@@ -317,7 +345,10 @@ def index():
         display_name=session.get("display_name"),
         role=session.get("role"),
         public_ip=config["public_ip"],
-        auth_mode=config.get("auth_mode", "central")
+        auth_mode=config.get("auth_mode", "central"),
+        local_tunnel_ip=config.get("local_ip", config.get("local_tunnel_ip", "10.18.12.1")),
+        ip_pool_start=config.get("ip_pool_start", "10.18.15.1"),
+        ip_pool_end=config.get("ip_pool_end", "10.18.15.254")
     )
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -367,6 +398,14 @@ def login():
                 res_data = resp.json()
                 if res_data.get("success"):
                     c_role = res_data.get("role", "operator")
+                    # Check ADMIN_GROUP matching
+                    user_groups = res_data.get("groups", [])
+                    if isinstance(user_groups, str):
+                        user_groups = [user_groups]
+                    admin_group = config.get("admin_group", "").strip().lower()
+                    if admin_group and any(str(g).strip().lower() == admin_group for g in user_groups):
+                        c_role = "admin"
+
                     disp_name = res_data.get("display_name") or res_data.get("full_name") or username
                     effective_role = sync_node_user(res_data.get("username", username), c_role, disp_name, "central")
                     session["logged_in"] = True
@@ -453,8 +492,10 @@ def get_next_ip():
     next_ip = manager.get_next_available_ip(allocated, config["ip_pool_start"], config["ip_pool_end"])
     return jsonify({"next_ip": next_ip})
 
+import ipaddress
+
 @app.route('/api/clients', methods=['POST'])
-@login_required
+@operator_required
 def create_client():
     data = request.json or {}
     username = data.get("username", "").strip()
@@ -465,6 +506,11 @@ def create_client():
 
     if not username:
         return jsonify({"error": "Имя учетной записи (логин) обязательно"}), 400
+
+    # Ensure username is safe for pppd
+    clean_username = "".join(ch for ch in username if ch.isalnum() or ch in "_-.")
+    if not clean_username:
+        return jsonify({"error": "Некорректный логин клиента"}), 400
 
     if not password:
         password = generate_secure_password()
@@ -480,6 +526,12 @@ def create_client():
             conn.close()
             return jsonify({"error": "Пул IP-адресов исчерпан"}), 400
     else:
+        try:
+            ipaddress.IPv4Address(assigned_ip)
+        except Exception:
+            conn.close()
+            return jsonify({"error": f"Некорректный IPv4-адрес: {assigned_ip}"}), 400
+
         if assigned_ip in allocated:
             conn.close()
             return jsonify({"error": f"IP-адрес {assigned_ip} уже занят другим клиентом"}), 400
@@ -487,7 +539,7 @@ def create_client():
     try:
         cursor.execute(
             "INSERT INTO clients (username, password, assigned_ip, description, device_type, enabled) VALUES (?, ?, ?, ?, ?, 1)",
-            (username, password, assigned_ip, description, device_type)
+            (clean_username, password, assigned_ip, description, device_type)
         )
         conn.commit()
 
@@ -496,12 +548,12 @@ def create_client():
         conn.close()
 
         manager.sync_chap_secrets(all_clients)
-        log_action(session.get("username"), "CLIENT_CREATE", f"Создан клиент {username} ({assigned_ip})")
+        log_action(session.get("username"), "CLIENT_CREATE", f"Создан клиент {clean_username} ({assigned_ip})")
 
         return jsonify({
             "success": True,
             "client": {
-                "username": username,
+                "username": clean_username,
                 "password": password,
                 "assigned_ip": assigned_ip,
                 "description": description,
@@ -516,7 +568,7 @@ def create_client():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/clients/update', methods=['POST'])
-@login_required
+@operator_required
 def update_client():
     data = request.json or {}
     client_id = data.get("id")
@@ -537,6 +589,21 @@ def update_client():
 
     username = row["username"]
     old_ip = row["assigned_ip"]
+
+    # Validate IP format and check uniqueness
+    if assigned_ip:
+        try:
+            ipaddress.IPv4Address(assigned_ip)
+        except Exception:
+            conn.close()
+            return jsonify({"error": f"Некорректный IPv4-адрес: {assigned_ip}"}), 400
+
+        cursor.execute("SELECT id FROM clients WHERE assigned_ip = ? AND id != ?", (assigned_ip, client_id))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({"error": f"IP-адрес {assigned_ip} уже занят другим клиентом"}), 400
+    else:
+        assigned_ip = old_ip
 
     try:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -567,7 +634,7 @@ def update_client():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/clients/toggle', methods=['POST'])
-@login_required
+@operator_required
 def toggle_client():
     data = request.json or {}
     client_id = data.get("id")
@@ -631,12 +698,106 @@ def delete_client():
     return jsonify({"success": True})
 
 @app.route('/api/clients/disconnect', methods=['POST'])
-@login_required
+@operator_required
 def disconnect_client():
     data = request.json or {}
     assigned_ip = data.get("assigned_ip", "").strip()
     if not assigned_ip:
         return jsonify({"error": "IP-адрес не указан"}), 400
+
+    success = manager.disconnect_peer(assigned_ip)
+    log_action(session.get("username"), "CLIENT_DISCONNECT", f"Принудительный сброс туннеля {assigned_ip}")
+    return jsonify({"success": success})
+
+@app.route('/api/clients/import', methods=['POST'])
+@operator_required
+def import_clients():
+    data = request.json or {}
+    raw_content = data.get("content", "").strip()
+    if not raw_content:
+        return jsonify({"error": "Содержимое для импорта пусто"}), 400
+
+    lines = raw_content.splitlines()
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Fetch existing
+    cursor.execute("SELECT username, assigned_ip FROM clients")
+    existing_rows = cursor.fetchall()
+    existing_users = {r[0].lower() for r in existing_rows}
+    existing_ips = {r[1] for r in existing_rows}
+
+    cursor.execute("SELECT assigned_ip FROM clients")
+    allocated = [r[0] for r in cursor.fetchall()]
+
+    imported = 0
+    skipped = 0
+    last_comment = ""
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            c = stripped.lstrip("#").strip()
+            if not c.lower().startswith("secrets for") and not c.lower().startswith("client\tserver"):
+                last_comment = c
+            continue
+
+        parts = stripped.split()
+        if len(parts) >= 3:
+            raw_user = parts[0].strip()
+            clean_user = "".join(ch for ch in raw_user if ch.isalnum() or ch in "_-.")
+            secret = parts[2].strip("'").strip('"')
+            ip = parts[3].strip() if len(parts) >= 4 else ""
+
+            if not clean_user or not secret:
+                continue
+
+            if clean_user.lower() in existing_users:
+                skipped += 1
+                continue
+
+            if ip and ip != "*":
+                try:
+                    ipaddress.IPv4Address(ip)
+                    if ip in existing_ips:
+                        ip = manager.get_next_available_ip(allocated, config["ip_pool_start"], config["ip_pool_end"])
+                except Exception:
+                    ip = manager.get_next_available_ip(allocated, config["ip_pool_start"], config["ip_pool_end"])
+            else:
+                ip = manager.get_next_available_ip(allocated, config["ip_pool_start"], config["ip_pool_end"])
+
+            if not ip:
+                break
+
+            lower_user = clean_user.lower()
+            device_type = "synology" if ("synology" in lower_user or "nas" in lower_user or "bkp" in lower_user) else "generic"
+
+            try:
+                cursor.execute(
+                    "INSERT INTO clients (username, password, assigned_ip, description, device_type, enabled) VALUES (?, ?, ?, ?, ?, 1)",
+                    (clean_user, secret, ip, last_comment or "Импортировано", device_type)
+                )
+                existing_users.add(clean_user.lower())
+                existing_ips.add(ip)
+                allocated.append(ip)
+                imported += 1
+                last_comment = ""
+            except sqlite3.IntegrityError:
+                skipped += 1
+
+    conn.commit()
+
+    # Re-sync chap-secrets once for all clients
+    cursor.execute("SELECT username, password, assigned_ip, description, enabled FROM clients")
+    all_clients = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    manager.sync_chap_secrets(all_clients)
+    log_action(session.get("username"), "CLIENT_IMPORT", f"Пакетный импорт: добавлено {imported}, пропущено {skipped}")
+
+    return jsonify({"success": True, "imported": imported, "skipped": skipped})
 
     success = manager.disconnect_peer(assigned_ip)
     log_action(session.get("username"), "CLIENT_DISCONNECT", f"Принудительный сброс туннеля {assigned_ip}")

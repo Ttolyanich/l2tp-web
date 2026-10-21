@@ -171,7 +171,8 @@ class L2TPManager:
     def sync_chap_secrets(self, clients):
         """
         Writes the chap-secrets file from a list of client dicts:
-        [{username, password, assigned_ip, enabled}]
+        [{username, password, assigned_ip, enabled, description}]
+        Sanitizes all inputs to prevent line injection or quoting errors.
         """
         lines = [
             "# Secrets for authentication using CHAP",
@@ -182,23 +183,35 @@ class L2TPManager:
         for c in clients:
             if not c.get("enabled", True):
                 continue
-            user = c.get("username", "").strip()
-            secret = c.get("password", "").strip()
-            ip = c.get("assigned_ip", "").strip() or "*"
-            desc = c.get("description", "").strip()
-            
-            if not user or not secret:
+            raw_user = str(c.get("username", "")).strip()
+            raw_secret = str(c.get("password", "")).strip()
+            raw_ip = str(c.get("assigned_ip", "")).strip() or "*"
+            raw_desc = str(c.get("description", "")).strip()
+
+            # Sanitize username: remove any whitespace, tabs, newlines, quotes
+            user = re.sub(r'[\s\'"]', '', raw_user)
+            if not user or not raw_secret:
                 continue
 
-            if desc:
-                lines.append(f"# {desc}")
-            lines.append(f"{user}\tL2TP\t'{secret}'\t{ip}")
+            # Sanitize password: escape backslashes and double quotes, strip newlines
+            clean_secret = raw_secret.replace("\r", "").replace("\n", "").replace("\\", "\\\\").replace('"', '\\"')
+
+            # Sanitize IP: ensure no newlines/whitespace
+            clean_ip = re.sub(r'\s+', '', raw_ip)
+
+            # Sanitize description: single line only
+            if raw_desc:
+                clean_desc = raw_desc.replace("\r", "").replace("\n", " ").strip()
+                lines.append(f"# {clean_desc}")
+
+            # Use '*' as server so pppd matches regardless of 'l2tpd' or 'L2TP' naming
+            lines.append(f'{user}\t*\t"{clean_secret}"\t{clean_ip}')
 
         content = "\n".join(lines) + "\n"
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(self.chap_secrets_path), exist_ok=True)
-        
+
         # Write temporary and atomic replace
         tmp_path = self.chap_secrets_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
@@ -213,8 +226,8 @@ class L2TPManager:
         if peer_ip in active:
             ifname = active[peer_ip]["interface"]
             try:
-                # Find pid of pppd managing this interface
-                out = subprocess.check_output(["pgrep", "-f", f"pppd.*{ifname}"], text=True).strip()
+                # Find pid of pppd managing this exact interface using regex word boundaries
+                out = subprocess.check_output(["pgrep", "-f", f"pppd.*\\b{ifname}\\b"], text=True).strip()
                 for pid in out.split():
                     subprocess.run(["kill", "-HUP", pid], check=False)
                 return True
@@ -287,53 +300,90 @@ class L2TPManager:
 
     def get_ipsec_psk(self):
         """Extracts the current IPsec Pre-Shared Key (PSK)."""
-        if os.path.exists(self.l2tp_secrets_path):
-            try:
-                with open(self.l2tp_secrets_path, "r", encoding="utf-8", errors="ignore") as f:
-                    for line in f:
-                        if "PSK" in line:
-                            parts = line.split("PSK", 1)
-                            if len(parts) > 1:
-                                psk = parts[1].strip().strip('"').strip("'")
-                                return psk
-            except Exception:
-                pass
+        paths_to_check = [
+            self.l2tp_secrets_path,
+            os.path.join(self.data_dir, "l2tp.secrets"),
+            os.path.join(self.ipsec_dir, "ipsec.d", "l2tp.secrets")
+        ]
+        for p in paths_to_check:
+            if p and os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            if "PSK" in line:
+                                parts = line.split("PSK", 1)
+                                if len(parts) > 1:
+                                    psk = parts[1].strip().strip('"').strip("'")
+                                    if psk:
+                                        return psk
+                except Exception:
+                    pass
         return os.getenv("L2TP_IPSEC_PSK", "L2tP(L2tB)Gbylf2019!")
 
     def apply_structured_config(self, new_cfg, app_config, config_path):
         """
         Validates, saves config parameters into app_config and config.json,
         and regenerates underlying Libreswan, xl2tpd, options.xl2tpd, and iptables configs.
+        Prevents shell injection by strictly validating all IP parameters.
         """
         import json
 
         server_host = str(new_cfg.get("server_host", "")).strip()
         ipsec_psk = str(new_cfg.get("ipsec_psk", "")).strip()
-        local_ip = str(new_cfg.get("local_ip", "10.18.12.1")).strip()
-        ip_pool_start = str(new_cfg.get("ip_pool_start", "10.18.15.1")).strip()
-        ip_pool_end = str(new_cfg.get("ip_pool_end", "10.18.15.254")).strip()
-        netmask = str(new_cfg.get("netmask", "255.255.255.0")).strip()
-        dns1 = str(new_cfg.get("dns1", "10.18.8.90")).strip()
-        dns2 = str(new_cfg.get("dns2", "1.1.1.1")).strip()
-        try:
-            mtu = int(new_cfg.get("mtu", 1360))
-        except (ValueError, TypeError):
-            mtu = 1360
-        try:
-            mru = int(new_cfg.get("mru", 1360))
-        except (ValueError, TypeError):
-            mru = 1360
-        zabbix_subnet = str(new_cfg.get("zabbix_subnet", "10.18.8.0/22")).strip()
-        try:
-            tcp_mss = int(new_cfg.get("tcp_mss", 1300))
-        except (ValueError, TypeError):
-            tcp_mss = 1300
-        proxy_arp = bool(new_cfg.get("proxy_arp", True))
+        local_ip_raw = str(new_cfg.get("local_ip", "10.18.12.1")).strip()
+        ip_pool_start_raw = str(new_cfg.get("ip_pool_start", "10.18.15.1")).strip()
+        ip_pool_end_raw = str(new_cfg.get("ip_pool_end", "10.18.15.254")).strip()
+        netmask_raw = str(new_cfg.get("netmask", "255.255.255.0")).strip()
+        dns1_raw = str(new_cfg.get("dns1", "10.18.8.90")).strip()
+        dns2_raw = str(new_cfg.get("dns2", "1.1.1.1")).strip()
+        zabbix_subnet_raw = str(new_cfg.get("zabbix_subnet", "10.18.8.0/22")).strip()
 
         if not ipsec_psk:
             return False, "Общий ключ IPsec PSK не может быть пустым"
-        if not local_ip or not ip_pool_start or not ip_pool_end:
-            return False, "Необходимо указать локальный IP и диапазон пула адресов"
+
+        # Strict IP validation to eliminate any command injection risk
+        try:
+            local_ip = str(ipaddress.IPv4Address(local_ip_raw))
+            ip_pool_start = str(ipaddress.IPv4Address(ip_pool_start_raw))
+            ip_pool_end = str(ipaddress.IPv4Address(ip_pool_end_raw))
+            netmask = str(ipaddress.IPv4Address(netmask_raw))
+            zabbix_subnet = str(ipaddress.IPv4Network(zabbix_subnet_raw, strict=False))
+        except Exception as e:
+            return False, f"Ошибка валидации IP/подсети: {e}"
+
+        dns1 = ""
+        if dns1_raw:
+            try:
+                dns1 = str(ipaddress.IPv4Address(dns1_raw))
+            except Exception:
+                return False, f"Некорректный IP адрес DNS 1: {dns1_raw}"
+
+        dns2 = ""
+        if dns2_raw:
+            try:
+                dns2 = str(ipaddress.IPv4Address(dns2_raw))
+            except Exception:
+                return False, f"Некорректный IP адрес DNS 2: {dns2_raw}"
+
+        try:
+            mtu = int(new_cfg.get("mtu", 1360))
+            mtu = max(576, min(1500, mtu))
+        except (ValueError, TypeError):
+            mtu = 1360
+
+        try:
+            mru = int(new_cfg.get("mru", 1360))
+            mru = max(576, min(1500, mru))
+        except (ValueError, TypeError):
+            mru = 1360
+
+        try:
+            tcp_mss = int(new_cfg.get("tcp_mss", 1300))
+            tcp_mss = max(500, min(1460, tcp_mss))
+        except (ValueError, TypeError):
+            tcp_mss = 1300
+
+        proxy_arp = bool(new_cfg.get("proxy_arp", True))
 
         # Update in-memory app_config
         app_config["server_host"] = server_host
@@ -361,18 +411,19 @@ class L2TPManager:
             print(f"Warning: Could not save config.json: {e}")
 
         # 1. Update l2tp.secrets
-        psk_content = f': PSK "{ipsec_psk}"\n'
+        psk_content = f'%any %any: PSK "{ipsec_psk}"\n'
         self.save_config_file("l2tp.secrets", psk_content)
 
-        # 2. Update xl2tpd.conf
+        # 2. Update xl2tpd.conf (CRITICAL: assign ip = no allows pppd to assign static IPs from chap-secrets)
         xl2tpd_content = (
             "[global]\n"
             "port = 1701\n"
             "access control = no\n\n"
             "[lns default]\n"
             f"ip range = {ip_pool_start}-{ip_pool_end}\n"
+            "assign ip = no\n"
             f"local ip = {local_ip}\n"
-            "require chap = yes\n"
+            "refuse chap = yes\n"
             "refuse pap = yes\n"
             "require authentication = yes\n"
             "name = l2tpd\n"
@@ -381,13 +432,15 @@ class L2TPManager:
         )
         self.save_config_file("xl2tpd.conf", xl2tpd_content)
 
-        # 3. Update options.xl2tpd
+        # 3. Update options.xl2tpd (CRITICAL: keep LCP echo to clean dead peer sessions)
         proxyarp_line = "proxyarp\n" if proxy_arp else ""
+        dns1_line = f"ms-dns {dns1}\n" if dns1 else ""
+        dns2_line = f"ms-dns {dns2}\n" if dns2 else ""
         options_content = (
             "ipcp-accept-local\n"
             "ipcp-accept-remote\n"
-            f"ms-dns {dns1}\n"
-            f"ms-dns {dns2}\n"
+            f"{dns1_line}"
+            f"{dns2_line}"
             "noccp\n"
             "auth\n"
             "crtscts\n"
@@ -396,6 +449,9 @@ class L2TPManager:
             f"mru {mru}\n"
             "nodefaultroute\n"
             "debug\n"
+            "lcp-echo-interval 5\n"
+            "lcp-echo-failure 10\n"
+            "lcp-echo-adaptive\n"
             f"{proxyarp_line}"
             "connect-delay 5000\n"
             "refuse-pap\n"
@@ -406,14 +462,18 @@ class L2TPManager:
         )
         self.save_config_file("options.xl2tpd", options_content)
 
-        # 4. Update iptables rules script
+        # 4. Update iptables rules script (MASQUERADE Zabbix polling traffic into 10.18.12.0/22 VPN subnet)
+        # 10.18.12.0/22 covers 10.18.12.X, 10.18.13.X, 10.18.14.X, 10.18.15.X
+        tunnel_net = "10.18.12.0/22"
         iptables_content = (
             "#!/bin/bash\n"
             "echo 1 > /proc/sys/net/ipv4/ip_forward\n"
-            f"iptables -t nat -C POSTROUTING -s {ip_pool_start}/24 -d {zabbix_subnet} -j MASQUERADE 2>/dev/null || "
-            f"iptables -t nat -A POSTROUTING -s {ip_pool_start}/24 -d {zabbix_subnet} -j MASQUERADE\n"
-            f"iptables -t mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss {tcp_mss} 2>/dev/null || "
-            f"iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss {tcp_mss}\n"
+            f"iptables -t nat -C POSTROUTING -s {zabbix_subnet} -d {tunnel_net} -j MASQUERADE 2>/dev/null || "
+            f"iptables -t nat -A POSTROUTING -s {zabbix_subnet} -d {tunnel_net} -j MASQUERADE\n"
+            f"iptables -t filter -C FORWARD -i ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss {tcp_mss} 2>/dev/null || "
+            f"iptables -t filter -A FORWARD -i ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss {tcp_mss}\n"
+            f"iptables -t filter -C FORWARD -o ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss {tcp_mss} 2>/dev/null || "
+            f"iptables -t filter -A FORWARD -o ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss {tcp_mss}\n"
         )
         self.save_config_file("iptables_rules", iptables_content)
         try:

@@ -1,4 +1,30 @@
 // ==============================================================================
+// Non-blocking Toast Notification Helper
+// ==============================================================================
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toastNotification');
+    if (!toast) {
+        console.log(`[${type}] ${message}`);
+        return;
+    }
+    toast.textContent = message;
+    toast.className = `toast-notification show ${type}`;
+    if (window._toastTimer) clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3200);
+}
+
+// Global ESC key listener to close modals
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (typeof closeClientModal === 'function') closeClientModal();
+        if (typeof closeCredentialsModal === 'function') closeCredentialsModal();
+        if (typeof closeImportModal === 'function') closeImportModal();
+    }
+});
+
+// ==============================================================================
 // L2TP Web Hub — Frontend Application Logic (Styled exactly as OpenVPN Web)
 // ==============================================================================
 
@@ -218,25 +244,45 @@ function renderClientsTable() {
         return true;
     });
 
+    const elBadge = document.getElementById('clientCounterBadge');
+    if (elBadge) {
+        const onlineCount = allClients.filter(c => c.online).length;
+        if (searchVal) {
+            elBadge.textContent = `${filtered.length} из ${allClients.length} клиентов`;
+        } else {
+            elBadge.textContent = `${allClients.length} клиентов (${onlineCount} онлайн)`;
+        }
+    }
+
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 32px; color: var(--text-muted);">Клиенты не найдены</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 32px; color: var(--text-muted);">${searchVal ? 'По запросу "' + escapeHtml(searchVal) + '" ничего не найдено' : 'Клиенты не найдены'}</td></tr>`;
         return;
     }
 
     tbody.innerHTML = filtered.map(c => {
         const statusHtml = c.online 
-            ? `<span class="status-indicator-dot online" title="Подключен"></span>` 
+            ? `<span class="status-indicator-dot online" title="Подключен (Онлайн)"></span>` 
             : (!c.enabled ? `<span class="status-indicator-dot disabled" title="Отключен"></span>` : `<span class="status-indicator-dot offline" title="Оффлайн"></span>`);
 
         const rxFormatted = formatBytes(c.rx_bytes);
         const txFormatted = formatBytes(c.tx_bytes);
 
+        let deviceBadge = '';
+        if (c.device_type === 'synology') {
+            deviceBadge = '<span class="badge-role" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Synology</span>';
+        } else if (c.device_type === 'mikrotik') {
+            deviceBadge = '<span class="badge-role" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">MikroTik</span>';
+        }
+
+        const safeUsername = encodeURIComponent(c.username);
+        const safeIp = encodeURIComponent(c.assigned_ip);
+
         return `
-            <tr>
+            <tr style="${!c.enabled ? 'opacity: 0.65;' : ''}">
                 <td>${statusHtml}</td>
                 <td>
-                    <strong style="font-size: 14px;">${escapeHtml(c.username)}</strong>
-                    ${c.device_type === 'synology' ? '<span class="badge-role" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Synology</span>' : ''}
+                    <strong style="font-size: 13.5px;">${escapeHtml(c.username)}</strong>
+                    ${deviceBadge}
                 </td>
                 <td><span style="color: var(--text-muted); font-size: 13px;">${escapeHtml(c.description || '—')}</span></td>
                 <td><code style="background: var(--bg-offset); padding: 3px 6px; border-radius: 4px; font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-main);">${escapeHtml(c.assigned_ip)}</code></td>
@@ -248,11 +294,11 @@ function renderClientsTable() {
                 </td>
                 <td class="text-right">
                     <div style="display: inline-flex; gap: 6px; justify-content: flex-end;">
-                        <button type="button" class="btn-action-icon" title="Реквизиты и памятка DSM" onclick="showCredentials('${escapeHtml(c.username)}')">🔑</button>
-                        ${c.online ? `<button type="button" class="btn-action-icon" style="color: var(--warning);" title="Сбросить туннель" onclick="disconnectTunnel('${escapeHtml(c.assigned_ip)}')">⚡</button>` : ''}
-                        <button type="button" class="btn-action-icon" title="Редактировать" onclick="editClient(${c.id})">✏️</button>
-                        <button type="button" class="btn-action-icon" title="${c.enabled ? 'Отключить' : 'Включить'}" onclick="toggleClient(${c.id})">${c.enabled ? '⏸️' : '▶️'}</button>
-                        <button type="button" class="btn-action-icon" style="color: var(--danger);" title="Удалить" onclick="deleteClient(${c.id}, '${escapeHtml(c.username)}')">🗑️</button>
+                        <button type="button" class="btn-action-icon" title="Реквизиты и памятка DSM" onclick="showCredentials(decodeURIComponent('${safeUsername}'))"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-1.5 1.5L14 9l-1.5-1.5M10 14a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/></svg></button>
+                        ${c.online ? `<button type="button" class="btn-action-icon" style="color: var(--warning);" title="Сбросить туннель" onclick="disconnectTunnel(decodeURIComponent('${safeIp}'))"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>` : ''}
+                        <button type="button" class="btn-action-icon" title="Редактировать" onclick="editClient(${c.id})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                        <button type="button" class="btn-action-icon" title="${c.enabled ? 'Отключить' : 'Включить'}" onclick="toggleClient(${c.id})">${c.enabled ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>'}</button>
+                        <button type="button" class="btn-action-icon" style="color: var(--danger);" title="Удалить" onclick="deleteClient(${c.id}, decodeURIComponent('${safeUsername}'))"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                     </div>
                 </td>
             </tr>
@@ -531,7 +577,7 @@ function closeCredentialsModal() {
 function copyText(elemId) {
     const text = document.getElementById(elemId).textContent;
     navigator.clipboard.writeText(text);
-    alert('Скопировано: ' + text);
+    showToast('Скопировано: ' + text, 'success');
 }
 
 function copyAllCredentials() {
@@ -549,7 +595,7 @@ function copyAllCredentials() {
 Важно: В свойствах подключения Synology DSM снимите галочку "Использовать шлюз удаленной сети".`;
 
     navigator.clipboard.writeText(text);
-    alert('Все реквизиты скопированы в буфер обмена!');
+    showToast('Все реквизиты скопированы в буфер обмена!', 'success');
 }
 
 // ==============================================================================
@@ -791,17 +837,28 @@ async function restartServicesBtn() {
         return;
     }
 
+    const btns = [document.getElementById('serviceRestartBtn')].filter(Boolean);
+    btns.forEach(b => {
+        b.disabled = true;
+        b.classList.add('btn-spinning');
+    });
+
     try {
         const res = await fetch('/api/service/restart', { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.success) {
-            alert('Службы успешно перезапущены!');
+            showToast('Службы IPsec и xl2tpd успешно перезапущены!', 'success');
             setTimeout(loadServiceStatus, 2000);
         } else {
-            alert(data.error || 'Ошибка при перезапуске служб');
+            showToast(data.error || 'Ошибка при перезапуске служб', 'error');
         }
     } catch (err) {
-        alert('Ошибка связи с сервером: ' + err);
+        showToast('Ошибка связи с сервером: ' + err, 'error');
+    } finally {
+        btns.forEach(b => {
+            b.disabled = false;
+            b.classList.remove('btn-spinning');
+        });
     }
 }
 
@@ -887,9 +944,10 @@ async function loadUsersTable() {
                     ${sourceBadge}
                 </td>
                 <td style="padding:12px 18px;">
-                    <select class="role-select" onchange="changeUserRole(${u.id}, this.value, '${escapeHtml(u.username)}')">
+                    <select class="role-select" onchange="changeUserRole(${u.id}, this.value, '${encodeURIComponent(u.username)}')">
                         <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>Оператор</option>
                         <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Администратор</option>
+                        <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>Наблюдатель</option>
                     </select>
                 </td>
                 <td style="padding:12px 18px; color:var(--text-muted); font-size:12px;">
@@ -948,50 +1006,27 @@ function closeImportModal() {
 async function processImportSecrets() {
     const text = document.getElementById('importSecretsText').value;
     if (!text.trim()) {
-        alert('Вставьте содержимое chap-secrets');
+        showToast('Вставьте содержимое chap-secrets для импорта', 'error');
         return;
     }
 
-    const lines = text.split('\n');
-    let imported = 0;
-    let lastComment = '';
-
-    for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line) continue;
-        if (line.startsWith('#')) {
-            lastComment = line.replace(/^#\s*/, '');
-            continue;
+    try {
+        const res = await fetch('/api/clients/import', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: text })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showToast(`Импорт завершен! Добавлено: ${data.imported}, пропущено: ${data.skipped}`, 'success');
+            closeImportModal();
+            loadClients();
+        } else {
+            showToast(data.error || 'Ошибка при импорте', 'error');
         }
-
-        const parts = line.split(/\s+/);
-        if (parts.length >= 3) {
-            const username = parts[0];
-            const secret = parts[2].replace(/^['"]|['"]$/g, '');
-            const ip = parts.length >= 4 ? parts[3] : '';
-
-            try {
-                const res = await fetch('/api/clients', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        username,
-                        password: secret,
-                        assigned_ip: ip,
-                        description: lastComment || 'Импортировано',
-                        device_type: username.toLowerCase().includes('synology') || username.toLowerCase().includes('nas') ? 'synology' : 'generic'
-                    })
-                });
-                if (res.ok) imported++;
-            } catch (e) {
-                console.error(e);
-            }
-        }
+    } catch (e) {
+        showToast('Ошибка связи с сервером при импорте', 'error');
     }
-
-    alert(`Импорт завершен! Добавлено: ${imported}`);
-    closeImportModal();
-    loadClients();
 }
 
 async function handleLogout() {

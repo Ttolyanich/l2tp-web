@@ -27,7 +27,7 @@ COPY . .
 # Setup supervisor and entrypoint
 RUN mkdir -p /etc/supervisor/conf.d && \
     cp supervisord.conf /etc/supervisor/conf.d/supervisord.conf && \
-    chmod +x /app/entrypoint.sh
+    chmod +x /app/entrypoint.sh /app/start_pluto.sh
 
 # Environment variables defaults
 ENV PORT=5000

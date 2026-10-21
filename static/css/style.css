@@ -746,8 +746,106 @@ html.layout-fullwidth body .main-container {
 }
 
 .data-table td {
+    padding: 13px 20px;
     border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s;
+    vertical-align: middle;
+}
+
+/* Индикаторы статуса подключений */
+.status-indicator-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+    background-color: var(--text-muted);
+    vertical-align: middle;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.status-indicator-dot.online {
+    background-color: var(--success);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.65);
+}
+
+.status-indicator-dot.offline {
+    background-color: #64748b;
+    opacity: 0.6;
+}
+
+.status-indicator-dot.disabled {
+    background-color: #ef4444;
+    opacity: 0.4;
+}
+
+/* Адаптивная сетка формы создания клиента */
+.client-inline-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr auto;
+    gap: 14px;
+    align-items: flex-end;
+}
+
+.inline-adv-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border-color);
+}
+
+/* Всплывающие уведомления (Toasts) */
+.toast-notification {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+}
+
+.toast-notification.show {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.toast-notification.success {
+    border-color: var(--success);
+}
+
+.toast-notification.error {
+    border-color: var(--danger);
+}
+
+/* Анимация спиннера для кнопок перезапуска */
+@keyframes spin-anim {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.btn-spinning svg {
+    animation: spin-anim 0.9s linear infinite;
+}
+
+.light-theme #plutoErrorAlert,
+.light-theme #xl2tpdErrorAlert {
+    color: #b91c1c !important;
+    background: rgba(239, 68, 68, 0.08) !important;
 }
 
 .data-table tbody tr:hover td {
@@ -2427,6 +2525,20 @@ html.layout-fullwidth body .main-content {
     }
 
     /* 7. Формы и настройки сервера */
+    .client-inline-grid {
+        grid-template-columns: 1fr !important;
+        align-items: stretch !important;
+    }
+
+    .client-inline-grid button.btn-submit {
+        width: 100% !important;
+        margin-top: 6px;
+    }
+
+    .inline-adv-grid {
+        grid-template-columns: 1fr !important;
+    }
+
     .config-grid-2 {
         grid-template-columns: 1fr !important;
         gap: 12px !important;

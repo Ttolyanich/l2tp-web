@@ -82,6 +82,15 @@ ln -sf "$DATA_DIR/l2tp.secrets" /etc/ipsec.d/l2tp.secrets
 ln -sf "$DATA_DIR/xl2tpd.conf" /etc/xl2tpd/xl2tpd.conf
 ln -sf "$DATA_DIR/options.xl2tpd" /etc/ppp/options.xl2tpd
 
+# Ensure chap-secrets exists in DATA_DIR and is symlinked to /etc/ppp/chap-secrets
+touch "$DATA_DIR/chap-secrets"
+ln -sf "$DATA_DIR/chap-secrets" /etc/ppp/chap-secrets
+chmod 600 "$DATA_DIR/chap-secrets" 2>/dev/null || true
+chmod 600 /etc/ppp/chap-secrets 2>/dev/null || true
+
+# Make helper scripts executable
+chmod +x /app/entrypoint.sh /app/start_pluto.sh 2>/dev/null || true
+
 # Ensure ipsec.secrets includes /etc/ipsec.d/*.secrets
 if [ ! -f /etc/ipsec.secrets ]; then
     echo "include /etc/ipsec.d/*.secrets" > /etc/ipsec.secrets
@@ -97,7 +106,7 @@ if [ ! -f /var/lib/ipsec/nss/cert9.db ]; then
     ipsec initnss --nssdir /var/lib/ipsec/nss 2>/dev/null || ipsec initnss 2>/dev/null || true
 fi
 chmod 700 /var/lib/ipsec/nss 2>/dev/null || true
-chmod 600 /var/lib/ipsec/nss/* 2>/dev/null || true
+find /var/lib/ipsec/nss -type f -exec chmod 600 {} + 2>/dev/null || true
 
 echo "Checking NSS and Libreswan config syntax..."
 ipsec --checknss 2>/dev/null || true
@@ -114,8 +123,21 @@ iptables -t filter -A FORWARD -o ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m t
 iptables -t nat -C POSTROUTING -s 10.18.8.0/22 -d 10.18.12.0/22 -j MASQUERADE 2>/dev/null || \
 iptables -t nat -A POSTROUTING -s 10.18.8.0/22 -d 10.18.12.0/22 -j MASQUERADE || true
 
-# 6. Initialize database and ensure chap-secrets exists
-python3 -c "import app; app.init_db()" || true
+# 6. Initialize database and sync chap-secrets from SQLite
+python3 -c "
+try:
+    import app
+    app.init_db()
+    conn = app.get_db()
+    c = conn.cursor()
+    c.execute('SELECT username, password, assigned_ip, description, enabled FROM clients')
+    clients = [dict(r) for r in c.fetchall()]
+    conn.close()
+    app.manager.sync_chap_secrets(clients)
+    print(f'[init] Synced {len(clients)} clients from DB to chap-secrets')
+except Exception as e:
+    print(f'[init] DB / chap-secrets sync error: {e}')
+" || true
 
 echo "Starting Supervisord..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

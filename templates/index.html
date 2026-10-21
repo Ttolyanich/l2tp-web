@@ -219,8 +219,8 @@
 
                     <div class="panel-card" style="padding: 16px 20px;">
                         <div style="font-size: 13px; color: var(--text-muted); font-weight: 500; margin-bottom: 8px;">Пул адресов Synology</div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--text-main); font-family: 'JetBrains Mono', monospace;">10.18.15.0/24</div>
-                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Шлюз Zabbix: 10.18.12.1</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text-main); font-family: 'JetBrains Mono', monospace;">{{ ip_pool_start }} – {{ ip_pool_end }}</div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Шлюз Zabbix: {{ local_tunnel_ip }}</div>
                     </div>
 
                     <div class="panel-card" style="padding: 16px 20px;">
@@ -246,7 +246,7 @@
                     </div>
                     <div class="card-body bg-offset" style="padding: 20px 24px;">
                         <div style="display: flex; flex-direction: column; gap: 16px;">
-                            <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr auto; gap: 14px; align-items: flex-end;">
+                            <div class="client-inline-grid">
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Логин (Имя учетной записи) <span style="color: var(--danger);">*</span></label>
                                     <input type="text" id="inlineClientUsername" placeholder="например: kaspi_synology" style="width: 100%;">
@@ -271,7 +271,7 @@
                             </div>
 
                             <!-- Дополнительные параметры -->
-                            <div id="inlineAdvancedOptions" class="hidden" style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color);">
+                            <div id="inlineAdvancedOptions" class="inline-adv-grid hidden">
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Описание / Компания / Локация</label>
                                     <input type="text" id="inlineClientDesc" placeholder="например: Офис Алматы, Бэкап СХД" style="width: 100%;">
@@ -588,11 +588,11 @@
                             </div>
                             <div style="display: flex; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
                                 <span style="color: var(--text-muted);">Локальный IP шлюза:</span>
-                                <span style="font-family: 'JetBrains Mono', monospace;">10.18.12.1</span>
+                                <span style="font-family: 'JetBrains Mono', monospace;">{{ local_tunnel_ip }}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
                                 <span style="color: var(--text-muted);">Диапазон пула:</span>
-                                <span style="font-family: 'JetBrains Mono', monospace;">10.18.15.1 – 10.18.15.254 (/24)</span>
+                                <span style="font-family: 'JetBrains Mono', monospace;">{{ ip_pool_start }} – {{ ip_pool_end }}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between;">
                                 <span style="color: var(--text-muted);">Режим авторизации:</span>
@@ -648,7 +648,7 @@
     </div>
 
     <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ / РЕДАКТИРОВАНИЕ КЛИЕНТА -->
-    <div id="clientModal" class="modal-overlay hidden">
+    <div id="clientModal" class="modal-overlay hidden" onclick="if(event.target===this) closeClientModal()">
         <div class="modal-card" style="max-width: 520px; padding: 24px;">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h3 class="modal-title" id="clientModalTitle" style="margin: 0; font-size: 16px; font-weight: 700;">Создать учетную запись клиента</h3>
@@ -703,7 +703,7 @@
     </div>
 
     <!-- МОДАЛЬНОЕ ОКНО: КАРТОЧКА РЕКВИЗИТОВ SYNOLOGY -->
-    <div id="credentialsModal" class="modal-overlay hidden">
+    <div id="credentialsModal" class="modal-overlay hidden" onclick="if(event.target===this) closeCredentialsModal()">
         <div class="modal-card" style="max-width: 600px; padding: 24px;">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
                 <h3 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700;">Карточка подключения Synology L2TP/IPSec</h3>
@@ -769,7 +769,7 @@
     </div>
 
     <!-- МОДАЛЬНОЕ ОКНО: ИМПОРТ -->
-    <div id="importModal" class="modal-overlay hidden">
+    <div id="importModal" class="modal-overlay hidden" onclick="if(event.target===this) closeImportModal()">
         <div class="modal-card" style="max-width: 600px; padding: 24px;">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
                 <h3 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700;">Импорт учетных записей со старого сервера</h3>
@@ -787,5 +787,6 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <div id="toastNotification" class="toast-notification"></div>
 </body>
 </html>
