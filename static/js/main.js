@@ -15,6 +15,47 @@ function showToast(message, type = 'info') {
     }, 3200);
 }
 
+// Bulletproof copy helper (works in HTTPS, HTTP, and local network IPs)
+async function copyToClipboard(text) {
+    if (!text) return false;
+    // 1. Try modern clipboard API if available in secure context
+    if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (e) {
+            console.warn('navigator.clipboard.writeText failed, using fallback', e);
+        }
+    }
+
+    // 2. Reliable fallback using document.execCommand('copy')
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.top = '0';
+        textarea.style.left = '0';
+        textarea.style.position = 'fixed';
+        textarea.style.width = '2em';
+        textarea.style.height = '2em';
+        textarea.style.padding = '0';
+        textarea.style.border = 'none';
+        textarea.style.outline = 'none';
+        textarea.style.boxShadow = 'none';
+        textarea.style.background = 'transparent';
+        textarea.setAttribute('readonly', '');
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return successful;
+    } catch (err) {
+        console.error('execCommand copy failed', err);
+        return false;
+    }
+}
+
 // Global ESC key listener to close modals
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -278,10 +319,10 @@ function renderClientsTable() {
         const safeIp = encodeURIComponent(c.assigned_ip);
 
         return `
-            <tr style="${!c.enabled ? 'opacity: 0.65;' : ''}">
+            <tr class="client-row-interactive" onclick="handleClientRowClick(event, decodeURIComponent('${safeUsername}'))" title="Нажмите, чтобы открыть реквизиты Synology DSM" style="${!c.enabled ? 'opacity: 0.65;' : ''}">
                 <td>${statusHtml}</td>
                 <td>
-                    <strong style="font-size: 13.5px;">${escapeHtml(c.username)}</strong>
+                    <strong class="client-name-link" style="font-size: 13.5px;">${escapeHtml(c.username)}</strong>
                     ${deviceBadge}
                 </td>
                 <td><span style="color: var(--text-muted); font-size: 13px;">${escapeHtml(c.description || '—')}</span></td>
@@ -304,6 +345,13 @@ function renderClientsTable() {
             </tr>
         `;
     }).join('');
+}
+
+function handleClientRowClick(e, username) {
+    if (e.target.closest('button, a, input, select, textarea, .btn-action-icon')) {
+        return;
+    }
+    showCredentials(username);
 }
 
 function filterClients() {
@@ -574,13 +622,19 @@ function closeCredentialsModal() {
     document.getElementById('credentialsModal').classList.add('hidden');
 }
 
-function copyText(elemId) {
-    const text = document.getElementById(elemId).textContent;
-    navigator.clipboard.writeText(text);
-    showToast('Скопировано: ' + text, 'success');
+async function copyText(elemId) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    const text = el.textContent.trim();
+    const ok = await copyToClipboard(text);
+    if (ok) {
+        showToast('Скопировано: ' + text, 'success');
+    } else {
+        showToast('Не удалось скопировать', 'error');
+    }
 }
 
-function copyAllCredentials() {
+async function copyAllCredentials() {
     if (!window.currentCredData) return;
     const c = window.currentCredData;
     const text = `Реквизиты подключения L2TP/IPSec:
@@ -594,8 +648,12 @@ function copyAllCredentials() {
 ----------------------------------------
 Важно: В свойствах подключения Synology DSM снимите галочку "Использовать шлюз удаленной сети".`;
 
-    navigator.clipboard.writeText(text);
-    showToast('Все реквизиты скопированы в буфер обмена!', 'success');
+    const ok = await copyToClipboard(text);
+    if (ok) {
+        showToast('Все реквизиты скопированы в буфер обмена!', 'success');
+    } else {
+        showToast('Не удалось скопировать реквизиты', 'error');
+    }
 }
 
 // ==============================================================================
@@ -781,16 +839,12 @@ async function loadServiceStatus(silent = false) {
             const xl2tpdEl = document.getElementById('svcXl2tpdBadge');
             const iptablesEl = document.getElementById('svcIptablesBadge');
             const indicatorEl = document.getElementById('serviceIndicator');
-            const mobileDot = document.getElementById('mobileServiceStatusDot');
 
             const isAllOk = s.ipsec.running && s.xl2tpd.running;
 
             if (indicatorEl) {
                 indicatorEl.className = isAllOk ? 'service-status-badge status-active' : 'service-status-badge status-loading';
                 indicatorEl.textContent = isAllOk ? 'IPsec / L2TP Онлайн' : 'Службы не готовы';
-            }
-            if (mobileDot) {
-                mobileDot.className = isAllOk ? 'status-indicator-dot online' : 'status-indicator-dot offline';
             }
 
             const plutoErrEl = document.getElementById('plutoErrorAlert');

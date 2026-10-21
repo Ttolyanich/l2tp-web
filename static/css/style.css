@@ -852,9 +852,28 @@ html.layout-fullwidth body .main-container {
     background-color: var(--bg-offset) !important;
 }
 
+.client-row-interactive {
+    cursor: pointer;
+}
+
+.client-row-interactive td {
+    cursor: pointer;
+}
+
 .client-row-interactive:hover td {
     background-color: var(--bg-offset) !important;
-    cursor: pointer;
+}
+
+.client-name-link {
+    color: var(--text-main);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.15s ease;
+}
+
+.client-row-interactive:hover .client-name-link,
+.client-name-link:hover {
+    color: var(--accent);
 }
 
 .text-right {
