@@ -680,25 +680,57 @@ def get_credentials(username):
 @app.route('/api/server/config', methods=['GET'])
 @admin_required
 def get_server_config():
-    key = request.args.get("key", "ipsec.conf")
-    content = manager.read_config_file(key)
-    return jsonify({"key": key, "content": content})
+    # If raw file requested
+    key = request.args.get("key")
+    if key:
+        content = manager.read_config_file(key)
+        return jsonify({"key": key, "content": content})
+
+    # Structured config parameters matching OpenVPN Web
+    try:
+        cfg = {
+            "server_host": config.get("server_host") or config.get("public_ip") or "",
+            "ipsec_psk": manager.get_ipsec_psk(),
+            "local_ip": config.get("local_ip", "10.18.12.1"),
+            "ip_pool_start": config.get("ip_pool_start", "10.18.15.1"),
+            "ip_pool_end": config.get("ip_pool_end", "10.18.15.254"),
+            "netmask": config.get("netmask", "255.255.255.0"),
+            "dns1": config.get("dns1", "10.18.8.90"),
+            "dns2": config.get("dns2", "1.1.1.1"),
+            "mtu": config.get("mtu", 1360),
+            "mru": config.get("mru", 1360),
+            "zabbix_subnet": config.get("zabbix_subnet", "10.18.8.0/22"),
+            "tcp_mss": config.get("tcp_mss", 1300),
+            "proxy_arp": config.get("proxy_arp", True)
+        }
+        return jsonify({"success": True, "config": cfg})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/server/config', methods=['POST'])
 @admin_required
 def save_server_config():
     data = request.json or {}
-    key = data.get("key")
-    content = data.get("content")
 
-    if not key or content is None:
-        return jsonify({"error": "Параметры key и content обязательны"}), 400
+    # If raw file mode
+    if "key" in data and "content" in data:
+        key = data["key"]
+        content = data["content"]
+        if not key or content is None:
+            return jsonify({"error": "Параметры key и content обязательны"}), 400
+        success, msg = manager.save_config_file(key, content)
+        if success:
+            log_action(session.get("username"), "CONFIG_UPDATE", f"Отредактирован файл {key}")
+            return jsonify({"success": True, "message": msg})
+        return jsonify({"error": msg}), 500
 
-    success, msg = manager.save_config_file(key, content)
-    if success:
-        log_action(session.get("username"), "CONFIG_UPDATE", f"Отредактирован конфигурационный файл {key}")
-        return jsonify({"success": True, "message": msg})
-    return jsonify({"error": msg}), 500
+    # Structured parameters mode
+    ok, err = manager.apply_structured_config(data, config, CONFIG_PATH)
+    if not ok:
+        return jsonify({"error": err or "Ошибка сохранения параметров"}), 400
+
+    log_action(session.get("username"), "UPDATE_SERVER_CONFIG", "Обновлена конфигурация сервера L2TP/IPsec")
+    return jsonify({"success": True, "message": "Конфигурация сервера успешно сохранена и службы обновлены"})
 
 @app.route('/api/service/status', methods=['GET'])
 @login_required

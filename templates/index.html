@@ -233,6 +233,64 @@
                     </div>
                 </div>
 
+                <!-- Панель создания клиента (Inline Card like OpenVPN Web) -->
+                <div class="panel-card" style="margin-bottom: 24px;">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color);">
+                        <div>
+                            <h2 class="header-title uppercase-accent" style="font-size: 16px; font-weight: 700; margin: 0;">Создать учетную запись клиента</h2>
+                            <p class="header-subtitle font-mono" style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Выпуск учетных данных L2TP/IPsec, назначение IP и генерация параметров для Synology DSM</p>
+                        </div>
+                        <button type="button" class="btn-text" onclick="toggleAdvancedClientOptions()" id="advClientOptionsBtn" style="font-size: 12px; color: var(--accent);">
+                            + Дополнительные параметры
+                        </button>
+                    </div>
+                    <div class="card-body bg-offset" style="padding: 20px 24px;">
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr auto; gap: 14px; align-items: flex-end;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Логин (Имя учетной записи) <span style="color: var(--danger);">*</span></label>
+                                    <input type="text" id="inlineClientUsername" placeholder="например: kaspi_synology" style="width: 100%;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Фиксированный IP <span style="color: var(--danger);">*</span></label>
+                                    <div style="display: flex; gap: 6px;">
+                                        <input type="text" id="inlineClientIp" placeholder="10.18.15.1" style="font-family: 'JetBrains Mono', monospace; width: 100%;">
+                                        <button type="button" class="btn-secondary" onclick="fetchNextIp('inlineClientIp')" style="padding: 8px 12px; font-size: 11px;">Авто</button>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Пароль (Secret) <span style="color: var(--danger);">*</span></label>
+                                    <div style="display: flex; gap: 6px;">
+                                        <input type="text" id="inlineClientPassword" placeholder="Пароль" style="font-family: 'JetBrains Mono', monospace; width: 100%;">
+                                        <button type="button" class="btn-secondary" onclick="generatePasswordInline()" title="Сгенерировать надежный пароль" style="padding: 8px 12px; font-size: 13px;">🎲</button>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="createInlineClient()" class="btn-submit" id="createInlineClientBtn" style="min-width: 160px; height: 38px;">
+                                    + Создать клиента
+                                </button>
+                            </div>
+
+                            <!-- Дополнительные параметры -->
+                            <div id="inlineAdvancedOptions" class="hidden" style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color);">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Описание / Компания / Локация</label>
+                                    <input type="text" id="inlineClientDesc" placeholder="например: Офис Алматы, Бэкап СХД" style="width: 100%;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">Тип устройства</label>
+                                    <select id="inlineClientDevice" class="form-select" style="width: 100%;">
+                                        <option value="synology">Synology NAS (DSM)</option>
+                                        <option value="mikrotik">MikroTik RouterOS</option>
+                                        <option value="generic">Windows / macOS / Linux</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div id="inlineActionMsg" class="status-msg" style="display: none; margin-top: 4px;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Таблица клиентов -->
                 <div class="panel-card">
                     <div class="card-header table-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px;">
@@ -280,61 +338,196 @@
                 <div class="panel-card">
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color);">
                         <div>
-                            <h2 class="header-title uppercase-muted" style="font-size: 16px; font-weight: 700; margin: 0;">Журнал аудита безопасности</h2>
-                            <p style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">События входов, создания, модификации и удаления учетных записей</p>
+                            <h2 class="header-title uppercase-muted" style="font-size: 16px; font-weight: 700; margin: 0;">Журнал аудита действий (Audit Log)</h2>
+                            <p class="header-subtitle" style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Хронология действий операторов и администраторов в системе</p>
                         </div>
-                        <button type="button" class="btn-secondary" onclick="loadAuditLogs()" style="font-size: 12px; padding: 6px 12px;">
-                            🔄 Обновить
+                        <button type="button" onclick="loadAuditLogs()" class="btn-service-restart" style="width: auto; padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+                            ↺ Обновить
                         </button>
                     </div>
 
                     <div class="table-wrapper">
-                        <table class="data-table">
+                        <table class="data-table font-sm">
                             <thead>
                                 <tr>
-                                    <th style="width: 170px;">Время</th>
-                                    <th>Пользователь</th>
-                                    <th>Действие</th>
+                                    <th style="width: 180px;">Время</th>
+                                    <th style="width: 220px;">Оператор</th>
+                                    <th style="width: 150px;">Действие</th>
                                     <th>Детали</th>
-                                    <th>IP-адрес</th>
                                 </tr>
                             </thead>
                             <tbody id="auditTableBody">
-                                <tr><td colspan="5" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка журнала...</td></tr>
+                                <tr><td colspan="4" class="text-center" style="padding:16px; color:var(--text-muted);">Загрузка журнала...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <!-- Вкладка 3: Конфигурация сервера -->
+            <!-- Вкладка 3: Конфигурация сервера L2TP & IPsec -->
             <div id="tabSectionServerConfig" class="tab-section hidden">
                 <div class="panel-card">
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px;">
                         <div>
-                            <h2 class="header-title uppercase-muted" style="font-size: 16px; font-weight: 700; margin: 0;">Конфигурация сервера L2TP & IPsec</h2>
-                            <p style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Прямое редактирование конфигурационных файлов с автоматическим созданием резервных копий (.bak)</p>
+                            <h2 class="header-title uppercase-accent" style="font-size: 16px; font-weight: 700; margin: 0;">Конфигурация сервера L2TP & IPsec</h2>
+                            <p class="header-subtitle font-mono" style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Сетевые параметры, туннель, параметры IPsec, PPP и маршрутизация Zabbix</p>
                         </div>
-                        <div style="display: flex; gap: 10px;">
-                            <button type="button" class="btn-secondary" onclick="restartServicesBtn()" style="font-size: 13px; padding: 6px 12px;">
-                                🔄 Перезапустить службы
-                            </button>
-                            <button type="button" class="btn-primary" onclick="saveActiveConfig()" style="font-size: 13px; padding: 6px 14px;">
-                                💾 Сохранить файл
+                        <button type="button" onclick="loadServerConfigForm()" class="btn-service-restart" style="width: auto; padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Сбросить к текущим настройкам">
+                            ↺ Сбросить
+                        </button>
+                    </div>
+                    
+                    <div class="card-body" style="display: flex; flex-direction: column; gap: 24px; padding: 24px;">
+                        
+                        <!-- 1. Сетевые параметры сервера -->
+                        <div class="config-section">
+                            <h3 class="config-section-title">1. Сетевые параметры сервера</h3>
+                            <div class="config-grid-3">
+                                <div class="form-group">
+                                    <label>Внешний IP / Домен сервера</label>
+                                    <input type="text" id="cfgServerHost" placeholder="например: 10.18.9.190">
+                                    <span class="field-hint">Публичный адрес сервера для подключения Synology DSM</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>Локальный IP шлюза туннеля</label>
+                                    <input type="text" id="cfgLocalIp" placeholder="10.18.12.1">
+                                    <span class="field-hint">Директива <code>local ip</code> в xl2tpd.conf</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>Маска сети туннеля</label>
+                                    <input type="text" id="cfgNetmask" placeholder="255.255.255.0">
+                                    <span class="field-hint">Сетевая маска пула клиентов</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Параметры IPsec (Libreswan) -->
+                        <div class="config-section">
+                            <h3 class="config-section-title">2. Параметры IPsec (Libreswan) & Общий ключ</h3>
+                            <div class="config-grid-2">
+                                <div class="form-group">
+                                    <label>Общий секретный ключ (PSK / Pre-Shared Key)</label>
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="text" id="cfgIpsecPsk" placeholder="Секретный ключ IPsec" style="font-family: 'JetBrains Mono', monospace;">
+                                        <button type="button" class="btn-secondary" onclick="generatePsk('cfgIpsecPsk')" title="Сгенерировать надежный ключ" style="padding: 8px 12px; font-size: 13px;">🎲</button>
+                                    </div>
+                                    <span class="field-hint">Задается в DSM при создании VPN профиля в поле «Общий ключ»</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>Порты L2TP / IPsec</label>
+                                    <input type="text" value="UDP 500 (IKE), UDP 4500 (NAT-T), UDP 1701 (L2TP)" disabled style="opacity: 0.7; font-family: monospace;">
+                                    <span class="field-hint">Стандартные протокольные порты демонов pluto и xl2tpd</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Пул адресов Synology NAS -->
+                        <div class="config-section">
+                            <h3 class="config-section-title">3. Пул IP-адресов клиентов (Synology Pool)</h3>
+                            <div class="config-grid-2">
+                                <div class="form-group">
+                                    <label>Начальный IP пула клиентов</label>
+                                    <input type="text" id="cfgClientPoolStart" placeholder="10.18.15.1" style="font-family: monospace;">
+                                    <span class="field-hint">Первый адрес диапазона <code>ip range</code> в xl2tpd.conf</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>Конечный IP пула клиентов</label>
+                                    <input type="text" id="cfgClientPoolEnd" placeholder="10.18.15.254" style="font-family: monospace;">
+                                    <span class="field-hint">Последний адрес диапазона выделения адресов</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Параметры PPP и DNS -->
+                        <div class="config-section">
+                            <h3 class="config-section-title">4. Параметры PPP и DNS (options.xl2tpd)</h3>
+                            <div class="config-grid-2">
+                                <div class="form-group">
+                                    <label>Основной DNS-сервер (Primary DNS)</label>
+                                    <input type="text" id="cfgDns1" placeholder="10.18.8.90">
+                                    <span class="field-hint">Директива <code>ms-dns</code> передается подключаемым клиентам</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>Резервный DNS-сервер (Secondary DNS)</label>
+                                    <input type="text" id="cfgDns2" placeholder="1.1.1.1">
+                                    <span class="field-hint">Вторичный DNS резолвер</span>
+                                </div>
+                            </div>
+
+                            <div class="config-grid-2" style="margin-top: 14px;">
+                                <div class="form-group">
+                                    <label>Размер MTU туннеля</label>
+                                    <input type="number" id="cfgMtu" min="576" max="1500" placeholder="1360">
+                                    <span class="field-hint">Максимальный размер блока данных (стандарт: 1360)</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>Размер MRU туннеля</label>
+                                    <input type="number" id="cfgMru" min="576" max="1500" placeholder="1360">
+                                    <span class="field-hint">Максимальный размер блока приема (стандарт: 1360)</span>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 16px;">
+                                <div class="toggle-control-row">
+                                    <div class="toggle-control-label">
+                                        <span class="toggle-title">Proxy ARP для интерфейсов туннеля</span>
+                                        <span class="toggle-desc">Директива <code>proxyarp</code> в options.xl2tpd. Позволяет отвечать на ARP-запросы соседних хостов.</span>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="cfgProxyArp" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. Маршрутизация Zabbix & NAT Firewall -->
+                        <div class="config-section">
+                            <h3 class="config-section-title">5. Маршрутизация Zabbix & Фильтрация MSS (Firewall)</h3>
+                            <div class="config-grid-2">
+                                <div class="form-group">
+                                    <label>Подсеть сервера Zabbix / Сеть опроса</label>
+                                    <input type="text" id="cfgZabbixSubnet" placeholder="10.18.8.0/22" style="font-family: monospace;">
+                                    <span class="field-hint">Диапазон, для которого применяется правило MASQUERADE</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>TCP MSS Clamping (Фиксация MSS)</label>
+                                    <input type="number" id="cfgTcpMss" min="1000" max="1460" placeholder="1300" style="font-family: monospace;">
+                                    <span class="field-hint">Предотвращает дропы фрагментированных SNMP и TCP пакетов</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Кнопка сохранения конфигурации -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 18px;">
+                            <div id="serverConfigStatusMsg" class="status-msg" style="margin-top: 0;"></div>
+                            <button type="button" onclick="saveServerConfigForm()" class="btn-submit" id="saveServerConfigBtn" style="min-width: 220px; padding: 12px 24px;">
+                                💾 Применить конфигурацию
                             </button>
                         </div>
-                    </div>
 
-                    <div style="display: flex; gap: 8px; padding: 12px 24px; background: var(--bg-offset); border-bottom: 1px solid var(--border-color); overflow-x: auto;">
-                        <button class="config-tab-btn active" id="tabBtn_ipsec_conf" onclick="loadConfigFile('ipsec.conf')">ipsec.conf (Libreswan)</button>
-                        <button class="config-tab-btn" id="tabBtn_l2tp_secrets" onclick="loadConfigFile('l2tp.secrets')">l2tp.secrets (Общий PSK)</button>
-                        <button class="config-tab-btn" id="tabBtn_xl2tpd_conf" onclick="loadConfigFile('xl2tpd.conf')">xl2tpd.conf (L2TP демон)</button>
-                        <button class="config-tab-btn" id="tabBtn_options_xl2tpd" onclick="loadConfigFile('options.xl2tpd')">options.xl2tpd (PPP опции)</button>
-                        <button class="config-tab-btn" id="tabBtn_iptables_rules" onclick="loadConfigFile('iptables_rules')">iptables_rules (Firewall & NAT)</button>
-                    </div>
+                        <!-- Дополнительно: Режим эксперта (Raw-конфигурация) -->
+                        <details style="margin-top: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-card); overflow: hidden;">
+                            <summary style="padding: 12px 18px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-muted); user-select: none;">
+                                ⚙️ Режим эксперта: Прямой просмотр и редактирование файлов конфигурации
+                            </summary>
+                            <div style="padding: 16px; border-top: 1px solid var(--border-color); background: var(--bg-offset);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                                    <div style="display: flex; gap: 6px; overflow-x: auto;">
+                                        <button class="config-tab-btn active" id="tabBtn_ipsec_conf" onclick="loadConfigFile('ipsec.conf')">ipsec.conf</button>
+                                        <button class="config-tab-btn" id="tabBtn_l2tp_secrets" onclick="loadConfigFile('l2tp.secrets')">l2tp.secrets</button>
+                                        <button class="config-tab-btn" id="tabBtn_xl2tpd_conf" onclick="loadConfigFile('xl2tpd.conf')">xl2tpd.conf</button>
+                                        <button class="config-tab-btn" id="tabBtn_options_xl2tpd" onclick="loadConfigFile('options.xl2tpd')">options.xl2tpd</button>
+                                        <button class="config-tab-btn" id="tabBtn_iptables_rules" onclick="loadConfigFile('iptables_rules')">iptables_rules</button>
+                                    </div>
+                                    <button type="button" class="btn-primary" onclick="saveActiveConfig()" style="font-size: 12px; padding: 6px 12px;">
+                                        💾 Сохранить файл
+                                    </button>
+                                </div>
+                                <textarea id="configEditorTextarea" spellcheck="false" style="width: 100%; min-height: 280px; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; line-height: 1.5;"></textarea>
+                            </div>
+                        </details>
 
-                    <div style="padding: 16px 24px;">
-                        <textarea id="configEditorTextarea" spellcheck="false" style="width: 100%; min-height: 480px; font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; line-height: 1.5;"></textarea>
                     </div>
                 </div>
             </div>
@@ -407,31 +600,43 @@
                 </div>
             </div>
 
-            <!-- Вкладка 5: Пользователи и роли (RBAC) -->
+            <!-- Вкладка 5: Пользователи и доступ (Admin Only) -->
             <div id="tabSectionUsers" class="tab-section hidden">
                 <div class="panel-card">
-                    <div class="card-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color);">
-                        <h2 class="header-title uppercase-muted" style="font-size: 16px; font-weight: 700; margin: 0;">Пользователи веб-панели и роли</h2>
-                        <p style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Управление администраторами и операторами ноды L2TP Hub</p>
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border-color);">
+                        <div>
+                            <h2 class="header-title uppercase-accent" style="font-size: 16px; font-weight: 700; margin: 0;">Управление пользователями и ролями доступа</h2>
+                            <p class="header-subtitle font-mono" style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Разграничение прав: Администраторы (полный доступ) и Операторы (управление клиентами)</p>
+                        </div>
+                        <button type="button" onclick="loadUsersTable()" class="btn-service-restart" style="width: auto; padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+                            ↺ Обновить
+                        </button>
                     </div>
-
+                    
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>ID</th>
-                                    <th>Логин</th>
+                                    <th>Пользователь (Login)</th>
                                     <th>Отображаемое имя</th>
-                                    <th>Источник</th>
-                                    <th>Роль</th>
+                                    <th>Источник авторизации</th>
+                                    <th>Текущая роль</th>
                                     <th>Последний вход</th>
-                                    <th class="text-right">Действие</th>
+                                    <th>Дата создания</th>
                                 </tr>
                             </thead>
                             <tbody id="usersTableBody">
-                                <tr><td colspan="7" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка...</td></tr>
+                                <tr><td colspan="6" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка пользователей...</td></tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <div class="card-body" style="border-top: 1px solid var(--border-color); background: var(--bg-offset); padding: 16px 24px;">
+                        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+                            💡 <strong>Примечание по приоритету ролей:</strong><br>
+                            Учетные записи, указанные в переменной <code>ADMIN_USERS</code> (или <code>L2TP_ADMIN_USERS</code>) файла <code>.env</code>, всегда автоматически получают роль <strong>Администратора</strong>.<br>
+                            Для остальных вошедших пользователей роль можно менять в выпадающем списке выше (роль сохраняется в локальной базе <code>node.db</code>).
+                        </div>
                     </div>
                 </div>
             </div>
@@ -439,30 +644,30 @@
         </main>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ КЛИЕНТА -->
+    <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ / РЕДАКТИРОВАНИЕ КЛИЕНТА -->
     <div id="clientModal" class="modal-overlay hidden">
-        <div class="modal-card" style="max-width: 520px;">
-            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
-                <h3 id="clientModalTitle" style="margin: 0; font-size: 16px; font-weight: 700;">Создать учетную запись клиента</h3>
-                <button type="button" class="btn-icon-subtle" onclick="closeClientModal()" style="font-size: 18px;">✕</button>
+        <div class="modal-card" style="max-width: 520px; padding: 24px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 class="modal-title" id="clientModalTitle" style="margin: 0; font-size: 16px; font-weight: 700;">Создать учетную запись клиента</h3>
+                <button type="button" class="btn-icon-toggle" onclick="closeClientModal()" style="border: none;" title="Закрыть">✕</button>
             </div>
-            <form id="clientForm" onsubmit="handleClientSubmit(event)" style="padding: 20px;">
+            <form id="clientForm" onsubmit="handleClientSubmit(event)">
                 <input type="hidden" id="editClientId">
 
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Имя учетной записи (Логин) <span style="color: var(--danger);">*</span></label>
-                    <input type="text" id="clientUsername" class="form-control" placeholder="например, kaspi_synology" required style="width: 100%; padding: 8px 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px;">
-                    <small style="font-size: 11px; color: var(--text-muted);">Используется при подключении в Synology DSM или роутере</small>
+                    <input type="text" id="clientUsername" class="form-control" placeholder="например: kaspi_synology" required style="width: 100%;">
+                    <span class="field-hint">Используется при подключении в Synology DSM или роутере</span>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Описание / Компания / Локация</label>
-                    <input type="text" id="clientDescription" class="form-control" placeholder="например, Офис Алматы, Бэкап СХД" style="width: 100%; padding: 8px 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px;">
+                    <input type="text" id="clientDescription" class="form-control" placeholder="например: Офис Алматы, Бэкап СХД" style="width: 100%;">
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Тип устройства</label>
-                    <select id="clientDeviceType" style="width: 100%; padding: 8px 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px;">
+                    <select id="clientDeviceType" class="form-select" style="width: 100%;">
                         <option value="synology">Synology NAS (DSM)</option>
                         <option value="mikrotik">MikroTik RouterOS</option>
                         <option value="generic">Windows / macOS / Linux</option>
@@ -472,21 +677,21 @@
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Фиксированный IP-адрес <span style="color: var(--danger);">*</span></label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="clientAssignedIp" placeholder="10.18.15.X" required style="flex: 1; padding: 8px 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; font-family: 'JetBrains Mono', monospace;">
-                        <button type="button" class="btn-secondary" onclick="fetchNextIp()" style="padding: 8px 14px;">Авто</button>
+                        <input type="text" id="clientAssignedIp" placeholder="10.18.15.X" required style="flex: 1; font-family: 'JetBrains Mono', monospace;">
+                        <button type="button" class="btn-secondary" onclick="fetchNextIp('clientAssignedIp')" style="padding: 8px 14px;">Авто</button>
                     </div>
-                    <small style="font-size: 11px; color: var(--text-muted);">Статический IP для опроса через Zabbix SNMP</small>
+                    <span class="field-hint">Статический IP для опроса через Zabbix SNMP</span>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 20px;">
+                <div class="form-group" style="margin-bottom: 24px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Пароль (Secret)</label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="clientPassword" placeholder="Оставьте пустым для автогенерации" style="flex: 1; padding: 8px 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; font-family: 'JetBrains Mono', monospace;">
-                        <button type="button" class="btn-secondary" onclick="generatePasswordInput()" style="padding: 8px 14px;">🎲</button>
+                        <input type="text" id="clientPassword" placeholder="Оставьте пустым для автогенерации" style="flex: 1; font-family: 'JetBrains Mono', monospace;">
+                        <button type="button" class="btn-secondary" onclick="generatePasswordInput()" style="padding: 8px 14px;" title="Сгенерировать">🎲</button>
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 18px;">
                     <button type="button" class="btn-secondary" onclick="closeClientModal()">Отмена</button>
                     <button type="submit" id="saveClientBtn" class="btn-primary">Сохранить</button>
                 </div>
@@ -496,64 +701,64 @@
 
     <!-- МОДАЛЬНОЕ ОКНО: КАРТОЧКА РЕКВИЗИТОВ SYNOLOGY -->
     <div id="credentialsModal" class="modal-overlay hidden">
-        <div class="modal-card" style="max-width: 600px;">
-            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
-                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Карточка подключения Synology L2TP/IPSec</h3>
-                <button type="button" class="btn-icon-subtle" onclick="closeCredentialsModal()" style="font-size: 18px;">✕</button>
+        <div class="modal-card" style="max-width: 600px; padding: 24px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                <h3 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700;">Карточка подключения Synology L2TP/IPSec</h3>
+                <button type="button" class="btn-icon-toggle" onclick="closeCredentialsModal()" style="border: none;" title="Закрыть">✕</button>
             </div>
-            <div style="padding: 20px;">
-                <div style="background: var(--bg-offset); border-left: 4px solid var(--info); padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 20px;">
+            <div>
+                <div style="background: var(--bg-offset); border-left: 4px solid var(--info); padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 18px;">
                     Используйте эти данные для настройки профиля VPN в панели управления Synology DSM.
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-offset); border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-offset); border-radius: 6px; border: 1px solid var(--border-color);">
                         <div>
                             <span style="color: var(--text-muted); font-size: 11px; display: block;">Адрес сервера:</span>
                             <span style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="credServer"></span>
                         </div>
-                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="copyText('credServer')">Копировать</button>
+                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyText('credServer')">Копировать</button>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-offset); border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-offset); border-radius: 6px; border: 1px solid var(--border-color);">
                         <div>
                             <span style="color: var(--text-muted); font-size: 11px; display: block;">Общий ключ IPsec (PSK):</span>
                             <span style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="credPsk"></span>
                         </div>
-                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="copyText('credPsk')">Копировать</button>
+                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyText('credPsk')">Копировать</button>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-offset); border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-offset); border-radius: 6px; border: 1px solid var(--border-color);">
                         <div>
                             <span style="color: var(--text-muted); font-size: 11px; display: block;">Имя пользователя (Логин):</span>
                             <span style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="credUsername"></span>
                         </div>
-                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="copyText('credUsername')">Копировать</button>
+                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyText('credUsername')">Копировать</button>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-offset); border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-offset); border-radius: 6px; border: 1px solid var(--border-color);">
                         <div>
                             <span style="color: var(--text-muted); font-size: 11px; display: block;">Пароль:</span>
                             <span style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="credPassword"></span>
                         </div>
-                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="copyText('credPassword')">Копировать</button>
+                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyText('credPassword')">Копировать</button>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-offset); border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-offset); border-radius: 6px; border: 1px solid var(--border-color);">
                         <div>
                             <span style="color: var(--text-muted); font-size: 11px; display: block;">Выделенный IP (Zabbix SNMP):</span>
                             <span style="font-weight: 700; color: var(--success); font-family: 'JetBrains Mono', monospace;" id="credIp"></span>
                         </div>
-                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="copyText('credIp')">Копировать</button>
+                        <button type="button" class="btn-secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyText('credIp')">Копировать</button>
                     </div>
                 </div>
 
-                <div style="margin-top: 20px; font-size: 12px; line-height: 1.6; color: var(--text-muted);">
+                <div style="margin-top: 18px; font-size: 12px; line-height: 1.6; color: var(--text-muted); background: var(--bg-offset); padding: 12px; border-radius: 6px;">
                     <strong style="color: var(--text-main);">Важно при настройке в DSM:</strong><br>
-                    В окне <em>Дополнительные параметры</em> <u>обязательно снимите</u> галочку <em>«Использовать шлюз удаленной сети»</em>, чтобы интернет офиса не шёл через сервер.
+                    В окне <em>Дополнительные параметры</em> <u>обязательно снимите</u> галочку <em>«Использовать шлюз удаленной сети»</em>, чтобы интернет офиса не шёл через VPN сервер.
                 </div>
             </div>
-            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding: 16px 20px;">
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 18px; margin-top: 18px;">
                 <button type="button" class="btn-secondary" onclick="copyAllCredentials()">Скопировать всё текстом</button>
                 <button type="button" class="btn-primary" onclick="closeCredentialsModal()">Готово</button>
             </div>
@@ -562,16 +767,16 @@
 
     <!-- МОДАЛЬНОЕ ОКНО: ИМПОРТ -->
     <div id="importModal" class="modal-overlay hidden">
-        <div class="modal-card" style="max-width: 600px;">
-            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
-                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Импорт учетных записей со старого сервера</h3>
-                <button type="button" class="btn-icon-subtle" onclick="closeImportModal()" style="font-size: 18px;">✕</button>
+        <div class="modal-card" style="max-width: 600px; padding: 24px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                <h3 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700;">Импорт учетных записей со старого сервера</h3>
+                <button type="button" class="btn-icon-toggle" onclick="closeImportModal()" style="border: none;" title="Закрыть">✕</button>
             </div>
-            <div style="padding: 20px;">
-                <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">Вставьте содержимое файла <code>/etc/ppp/chap-secrets</code> со старого сервера:</p>
-                <textarea id="importSecretsText" style="width: 100%; height: 220px; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;" placeholder="# client server secret IP..."></textarea>
+            <div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 10px;">Вставьте содержимое файла <code>/etc/ppp/chap-secrets</code> со старого сервера:</p>
+                <textarea id="importSecretsText" style="width: 100%; height: 200px; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;" placeholder="# client server secret IP..."></textarea>
             </div>
-            <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); padding: 16px 20px;">
+            <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 18px; margin-top: 18px;">
                 <button type="button" class="btn-secondary" onclick="closeImportModal()">Отмена</button>
                 <button type="button" class="btn-primary" onclick="processImportSecrets()">Выполнить импорт</button>
             </div>

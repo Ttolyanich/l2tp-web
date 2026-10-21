@@ -258,6 +258,133 @@ class L2TPManager:
                 pass
         return os.getenv("L2TP_IPSEC_PSK", "L2tP(L2tB)Gbylf2019!")
 
+    def apply_structured_config(self, new_cfg, app_config, config_path):
+        """
+        Validates, saves config parameters into app_config and config.json,
+        and regenerates underlying Libreswan, xl2tpd, options.xl2tpd, and iptables configs.
+        """
+        import json
+
+        server_host = str(new_cfg.get("server_host", "")).strip()
+        ipsec_psk = str(new_cfg.get("ipsec_psk", "")).strip()
+        local_ip = str(new_cfg.get("local_ip", "10.18.12.1")).strip()
+        ip_pool_start = str(new_cfg.get("ip_pool_start", "10.18.15.1")).strip()
+        ip_pool_end = str(new_cfg.get("ip_pool_end", "10.18.15.254")).strip()
+        netmask = str(new_cfg.get("netmask", "255.255.255.0")).strip()
+        dns1 = str(new_cfg.get("dns1", "10.18.8.90")).strip()
+        dns2 = str(new_cfg.get("dns2", "1.1.1.1")).strip()
+        try:
+            mtu = int(new_cfg.get("mtu", 1360))
+        except (ValueError, TypeError):
+            mtu = 1360
+        try:
+            mru = int(new_cfg.get("mru", 1360))
+        except (ValueError, TypeError):
+            mru = 1360
+        zabbix_subnet = str(new_cfg.get("zabbix_subnet", "10.18.8.0/22")).strip()
+        try:
+            tcp_mss = int(new_cfg.get("tcp_mss", 1300))
+        except (ValueError, TypeError):
+            tcp_mss = 1300
+        proxy_arp = bool(new_cfg.get("proxy_arp", True))
+
+        if not ipsec_psk:
+            return False, "Общий ключ IPsec PSK не может быть пустым"
+        if not local_ip or not ip_pool_start or not ip_pool_end:
+            return False, "Необходимо указать локальный IP и диапазон пула адресов"
+
+        # Update in-memory app_config
+        app_config["server_host"] = server_host
+        if server_host:
+            app_config["public_ip"] = server_host
+        app_config["ipsec_psk"] = ipsec_psk
+        app_config["local_ip"] = local_ip
+        app_config["ip_pool_start"] = ip_pool_start
+        app_config["ip_pool_end"] = ip_pool_end
+        app_config["netmask"] = netmask
+        app_config["dns1"] = dns1
+        app_config["dns2"] = dns2
+        app_config["mtu"] = mtu
+        app_config["mru"] = mru
+        app_config["zabbix_subnet"] = zabbix_subnet
+        app_config["tcp_mss"] = tcp_mss
+        app_config["proxy_arp"] = proxy_arp
+
+        # Persist to config.json
+        try:
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(app_config, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Warning: Could not save config.json: {e}")
+
+        # 1. Update l2tp.secrets
+        psk_content = f': PSK "{ipsec_psk}"\n'
+        self.save_config_file("l2tp.secrets", psk_content)
+
+        # 2. Update xl2tpd.conf
+        xl2tpd_content = (
+            "[global]\n"
+            "port = 1701\n"
+            "access control = no\n\n"
+            "[lns default]\n"
+            f"ip range = {ip_pool_start}-{ip_pool_end}\n"
+            f"local ip = {local_ip}\n"
+            "require chap = yes\n"
+            "refuse pap = yes\n"
+            "require authentication = yes\n"
+            "name = l2tpd\n"
+            "pppoptfile = /etc/ppp/options.xl2tpd\n"
+            "length bit = yes\n"
+        )
+        self.save_config_file("xl2tpd.conf", xl2tpd_content)
+
+        # 3. Update options.xl2tpd
+        proxyarp_line = "proxyarp\n" if proxy_arp else ""
+        options_content = (
+            "ipcp-accept-local\n"
+            "ipcp-accept-remote\n"
+            f"ms-dns {dns1}\n"
+            f"ms-dns {dns2}\n"
+            "noccp\n"
+            "auth\n"
+            "crtscts\n"
+            "idle 1800\n"
+            f"mtu {mtu}\n"
+            f"mru {mru}\n"
+            "nodefaultroute\n"
+            "debug\n"
+            f"{proxyarp_line}"
+            "connect-delay 5000\n"
+            "refuse-pap\n"
+            "refuse-chap\n"
+            "refuse-mschap\n"
+            "require-mschap-v2\n"
+            "name l2tpd\n"
+        )
+        self.save_config_file("options.xl2tpd", options_content)
+
+        # 4. Update iptables rules script
+        iptables_content = (
+            "#!/bin/bash\n"
+            "echo 1 > /proc/sys/net/ipv4/ip_forward\n"
+            f"iptables -t nat -C POSTROUTING -s {ip_pool_start}/24 -d {zabbix_subnet} -j MASQUERADE 2>/dev/null || "
+            f"iptables -t nat -A POSTROUTING -s {ip_pool_start}/24 -d {zabbix_subnet} -j MASQUERADE\n"
+            f"iptables -t mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss {tcp_mss} 2>/dev/null || "
+            f"iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss {tcp_mss}\n"
+        )
+        self.save_config_file("iptables_rules", iptables_content)
+        try:
+            if os.path.exists(self.iptables_rules_path):
+                subprocess.run(["bash", self.iptables_rules_path], check=False)
+        except Exception:
+            pass
+
+        # 5. Restart services
+        self.restart_services()
+
+        return True, None
+
     def restart_services(self):
         """Triggers service restart for Libreswan and xl2tpd."""
         results = []

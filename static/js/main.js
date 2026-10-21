@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initThemeAndUI();
     loadClients();
     loadServiceStatus();
+    fetchNextIp('inlineClientIp');
 
     // Auto-refresh stats and clients every 8 seconds
     setInterval(() => {
@@ -138,11 +139,12 @@ function switchNavTab(tabName) {
     if (usersSec) usersSec.classList.toggle('hidden', tabName !== 'users');
 
     if (tabName === 'server-config') {
+        loadServerConfigForm();
         loadConfigFile(activeConfigKey);
     } else if (tabName === 'audit') {
         loadAuditLogs();
     } else if (tabName === 'users') {
-        loadUsers();
+        loadUsersTable();
     } else if (tabName === 'services') {
         loadServiceStatus();
     }
@@ -282,25 +284,106 @@ function closeClientModal() {
     document.getElementById('clientModal').classList.add('hidden');
 }
 
-async function fetchNextIp() {
+async function fetchNextIp(targetId = 'clientAssignedIp') {
     try {
         const res = await fetch('/api/clients/next-ip');
         const data = await res.json();
         if (data.next_ip) {
-            document.getElementById('clientAssignedIp').value = data.next_ip;
+            const el = document.getElementById(targetId);
+            if (el) el.value = data.next_ip;
         }
     } catch (err) {
         console.error('Failed to get next IP:', err);
     }
 }
 
-function generatePasswordInput() {
+function generatePasswordInput(targetId = 'clientPassword') {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
     let pass = '';
     for (let i = 0; i < 16; i++) {
         pass += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    document.getElementById('clientPassword').value = pass;
+    const el = document.getElementById(targetId);
+    if (el) el.value = pass;
+    return pass;
+}
+
+function generatePasswordInline() {
+    generatePasswordInput('inlineClientPassword');
+}
+
+function toggleAdvancedClientOptions() {
+    const sec = document.getElementById('inlineAdvancedOptions');
+    const btn = document.getElementById('advClientOptionsBtn');
+    if (!sec) return;
+    const isHidden = sec.classList.toggle('hidden');
+    if (btn) {
+        btn.textContent = isHidden ? '+ Дополнительные параметры' : '− Скрыть параметры';
+    }
+}
+
+async function createInlineClient() {
+    const userEl = document.getElementById('inlineClientUsername');
+    const ipEl = document.getElementById('inlineClientIp');
+    const passEl = document.getElementById('inlineClientPassword');
+    const descEl = document.getElementById('inlineClientDesc');
+    const devEl = document.getElementById('inlineClientDevice');
+    const msgEl = document.getElementById('inlineActionMsg');
+    const btn = document.getElementById('createInlineClientBtn');
+
+    const username = userEl ? userEl.value.trim() : '';
+    const assigned_ip = ipEl ? ipEl.value.trim() : '';
+    const password = passEl ? passEl.value.trim() : '';
+    const description = descEl ? descEl.value.trim() : '';
+    const device_type = devEl ? devEl.value : 'synology';
+
+    if (!username) {
+        if (msgEl) {
+            msgEl.style.display = 'block';
+            msgEl.style.color = 'var(--danger)';
+            msgEl.textContent = 'Укажите логин клиента';
+        }
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/clients', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username, assigned_ip, password, description, device_type })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            if (userEl) userEl.value = '';
+            if (passEl) passEl.value = '';
+            if (descEl) descEl.value = '';
+            if (msgEl) {
+                msgEl.style.display = 'block';
+                msgEl.style.color = 'var(--success)';
+                msgEl.textContent = `Клиент ${username} успешно создан!`;
+                setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+            }
+            loadClients();
+            fetchNextIp('inlineClientIp');
+            showCredentials(username);
+        } else {
+            if (msgEl) {
+                msgEl.style.display = 'block';
+                msgEl.style.color = 'var(--danger)';
+                msgEl.textContent = data.error || 'Ошибка создания клиента';
+            }
+        }
+    } catch (err) {
+        if (msgEl) {
+            msgEl.style.display = 'block';
+            msgEl.style.color = 'var(--danger)';
+            msgEl.textContent = 'Ошибка связи: ' + err;
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 function editClient(id) {
@@ -500,6 +583,122 @@ async function loadConfigFile(key) {
     }
 }
 
+// ==============================================================================
+// Server Configuration Management (Structured form matching OpenVPN Web)
+// ==============================================================================
+async function loadServerConfigForm() {
+    const statusMsg = document.getElementById('serverConfigStatusMsg');
+    if (statusMsg) {
+        statusMsg.style.display = 'none';
+        statusMsg.textContent = '';
+    }
+
+    try {
+        const res = await fetch(`/api/server/config?_=${new Date().getTime()}`);
+        const data = await res.json();
+        if (res.ok && data.success && data.config) {
+            const cfg = data.config;
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val !== undefined && val !== null ? val : '';
+            };
+            const setChecked = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.checked = !!val;
+            };
+
+            setVal('cfgServerHost', cfg.server_host);
+            setVal('cfgLocalIp', cfg.local_ip || '10.18.12.1');
+            setVal('cfgNetmask', cfg.netmask || '255.255.255.0');
+            setVal('cfgIpsecPsk', cfg.ipsec_psk);
+            setVal('cfgClientPoolStart', cfg.ip_pool_start || '10.18.15.1');
+            setVal('cfgClientPoolEnd', cfg.ip_pool_end || '10.18.15.254');
+            setVal('cfgDns1', cfg.dns1 || '10.18.8.90');
+            setVal('cfgDns2', cfg.dns2 || '1.1.1.1');
+            setVal('cfgMtu', cfg.mtu || 1360);
+            setVal('cfgMru', cfg.mru || 1360);
+            setChecked('cfgProxyArp', cfg.proxy_arp !== false);
+            setVal('cfgZabbixSubnet', cfg.zabbix_subnet || '10.18.8.0/22');
+            setVal('cfgTcpMss', cfg.tcp_mss || 1300);
+        }
+    } catch (err) {
+        console.error('Failed to load server config:', err);
+    }
+}
+
+async function saveServerConfigForm() {
+    const statusMsg = document.getElementById('serverConfigStatusMsg');
+    const btn = document.getElementById('saveServerConfigBtn');
+
+    if (!confirm('Применить и сохранить новую конфигурацию сервера? Службы IPsec и xl2tpd будут автоматически перезапущены.')) {
+        return;
+    }
+
+    const payload = {
+        server_host: document.getElementById('cfgServerHost')?.value.trim() || '',
+        local_ip: document.getElementById('cfgLocalIp')?.value.trim() || '10.18.12.1',
+        netmask: document.getElementById('cfgNetmask')?.value.trim() || '255.255.255.0',
+        ipsec_psk: document.getElementById('cfgIpsecPsk')?.value.trim() || '',
+        ip_pool_start: document.getElementById('cfgClientPoolStart')?.value.trim() || '10.18.15.1',
+        ip_pool_end: document.getElementById('cfgClientPoolEnd')?.value.trim() || '10.18.15.254',
+        dns1: document.getElementById('cfgDns1')?.value.trim() || '',
+        dns2: document.getElementById('cfgDns2')?.value.trim() || '',
+        mtu: parseInt(document.getElementById('cfgMtu')?.value || '1360'),
+        mru: parseInt(document.getElementById('cfgMru')?.value || '1360'),
+        proxy_arp: !!document.getElementById('cfgProxyArp')?.checked,
+        zabbix_subnet: document.getElementById('cfgZabbixSubnet')?.value.trim() || '10.18.8.0/22',
+        tcp_mss: parseInt(document.getElementById('cfgTcpMss')?.value || '1300')
+    };
+
+    if (btn) btn.disabled = true;
+    if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.color = 'var(--text-muted)';
+        statusMsg.textContent = 'Применение конфигурации и перезапуск служб...';
+    }
+
+    try {
+        const res = await fetch('/api/server/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            if (statusMsg) {
+                statusMsg.style.color = 'var(--success)';
+                statusMsg.textContent = '✓ Конфигурация успешно сохранена и службы обновлены!';
+            }
+            setTimeout(() => {
+                loadServerConfigForm();
+                loadServiceStatus();
+            }, 1500);
+        } else {
+            if (statusMsg) {
+                statusMsg.style.color = 'var(--danger)';
+                statusMsg.textContent = `Ошибка: ${data.error || 'Не удалось сохранить конфигурацию'}`;
+            }
+        }
+    } catch (err) {
+        if (statusMsg) {
+            statusMsg.style.color = 'var(--danger)';
+            statusMsg.textContent = 'Ошибка сети: ' + err;
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function generatePsk(targetInputId = 'cfgIpsecPsk') {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^*()_+';
+    let psk = '';
+    for (let i = 0; i < 20; i++) {
+        psk += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const el = document.getElementById(targetInputId);
+    if (el) el.value = psk;
+}
+
 async function saveActiveConfig() {
     const content = document.getElementById('configEditorTextarea').value;
     if (!confirm(`Сохранить изменения в ${activeConfigKey}? Автоматически будет создан бэкап.`)) {
@@ -586,82 +785,130 @@ async function restartServicesBtn() {
 }
 
 // ==============================================================================
-// Audit & Users
+// Audit Log & Users RBAC (matching OpenVPN Web)
 // ==============================================================================
 async function loadAuditLogs() {
     const tbody = document.getElementById('auditTableBody');
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка...</td></tr>`;
 
     try {
-        const res = await fetch('/api/audit');
+        const res = await fetch(`/api/audit?_=${new Date().getTime()}`);
         const data = await res.json();
-        if (res.ok && data.logs) {
-            if (data.logs.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 24px; color: var(--text-muted);">Журнал пуст</td></tr>`;
-                return;
-            }
-            tbody.innerHTML = data.logs.map(l => `
-                <tr>
-                    <td style="font-size: 12px; font-family: 'JetBrains Mono', monospace;">${escapeHtml(l.timestamp)}</td>
-                    <td><strong>${escapeHtml(l.username)}</strong></td>
-                    <td><span class="badge-role" style="font-size: 11px;">${escapeHtml(l.action)}</span></td>
-                    <td>${escapeHtml(l.details || '—')}</td>
-                    <td><code style="font-size: 12px;">${escapeHtml(l.ip_address || '—')}</code></td>
-                </tr>
-            `).join('');
-        }
+        const logs = Array.isArray(data) ? data : (data.logs || []);
+        renderAuditLogs(logs);
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" style="color: var(--danger);">Ошибка загрузки: ${err}</td></tr>`;
+        console.error('Ошибка загрузки журнала аудита:', err);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center" style="padding: 24px; color: var(--danger);">Ошибка связи при загрузке журнала</td></tr>`;
     }
 }
 
-async function loadUsers() {
+function renderAuditLogs(logs) {
+    const tbody = document.getElementById('auditTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!Array.isArray(logs) || logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center" style="padding: 24px; color: var(--text-muted);">Журнал пуст</td></tr>`;
+        return;
+    }
+
+    logs.forEach(log => {
+        let actionBadge = `<span class="log-action info">${escapeHtml(log.action)}</span>`;
+        if (log.action.includes('FAIL') || log.action.includes('ERR')) {
+            actionBadge = `<span class="log-action fail">${escapeHtml(log.action)}</span>`;
+        } else if (log.action.includes('CREATE') || log.action.includes('LOGIN') || log.action.includes('UPDATE')) {
+            actionBadge = `<span class="log-action success">${escapeHtml(log.action)}</span>`;
+        } else if (log.action.includes('DELETE') || log.action.includes('REVOKE') || log.action.includes('LOGOUT')) {
+            actionBadge = `<span class="log-action revoke">${escapeHtml(log.action)}</span>`;
+        }
+
+        const ipInfo = log.ip_address ? ` <span style="color:var(--text-muted); font-size:11px; font-family:'JetBrains Mono', monospace;">(${escapeHtml(log.ip_address)})</span>` : '';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="color:var(--text-muted); white-space:nowrap; padding:12px 18px; font-size:12px; font-family:'JetBrains Mono', monospace;">${escapeHtml(log.timestamp)}</td>
+            <td style="font-weight:600; padding:12px 18px; font-size:13px;">${escapeHtml(log.username)}</td>
+            <td style="padding:12px 18px;">${actionBadge}</td>
+            <td style="color:var(--text-main); padding:12px 18px; font-size:13px;">${escapeHtml(log.details || '—')}${ipInfo}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function loadUsersTable() {
     const tbody = document.getElementById('usersTableBody');
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка...</td></tr>`;
 
     try {
-        const res = await fetch('/api/users');
+        const res = await fetch(`/api/users?_=${new Date().getTime()}`);
         const data = await res.json();
-        if (res.ok && data.users) {
-            tbody.innerHTML = data.users.map(u => `
-                <tr>
-                    <td>${u.id}</td>
-                    <td><strong>${escapeHtml(u.username)}</strong></td>
-                    <td>${escapeHtml(u.display_name || '—')}</td>
-                    <td><span class="badge-source">${escapeHtml(u.auth_source)}</span></td>
-                    <td><span class="badge-role badge-role-${u.role}">${u.role}</span></td>
-                    <td style="font-size: 12px;">${escapeHtml(u.last_login || '—')}</td>
-                    <td class="text-right">
-                        <select onchange="updateUserRole(${u.id}, this.value)" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 6px; font-size: 12px;">
-                            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
-                            <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>operator</option>
-                            <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>viewer</option>
-                        </select>
-                    </td>
-                </tr>
-            `).join('');
+        const users = Array.isArray(data) ? data : (data.users || []);
+
+        tbody.innerHTML = '';
+        if (users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 24px; color: var(--text-muted);">Пользователи не найдены</td></tr>`;
+            return;
         }
+
+        users.forEach(u => {
+            const row = document.createElement('tr');
+            const sourceBadge = (u.auth_source === 'central' || u.auth_source === 'ca' || u.auth_source === 'ldap')
+                ? `<span class="badge-source" title="Единая точка входа (SSO / Active Directory)">SSO / AD</span>`
+                : `<span class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--text-muted); font-size:10px;">Локальный</span>`;
+
+            row.innerHTML = `
+                <td style="font-weight:600; padding:12px 18px; font-family:'JetBrains Mono', monospace; font-size:13px;">
+                    ${escapeHtml(u.username)}
+                </td>
+                <td style="padding:12px 18px; color:var(--text-main); font-size:13px;">
+                    ${escapeHtml(u.display_name || u.username)}
+                </td>
+                <td style="padding:12px 18px;">
+                    ${sourceBadge}
+                </td>
+                <td style="padding:12px 18px;">
+                    <select class="role-select" onchange="changeUserRole(${u.id}, this.value, '${escapeHtml(u.username)}')">
+                        <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>Оператор</option>
+                        <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Администратор</option>
+                    </select>
+                </td>
+                <td style="padding:12px 18px; color:var(--text-muted); font-size:12px;">
+                    ${escapeHtml(u.last_login || '—')}
+                </td>
+                <td style="padding:12px 18px; color:var(--text-muted); font-size:12px;">
+                    ${escapeHtml(u.created_at || '—')}
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" style="color: var(--danger);">Ошибка: ${err}</td></tr>`;
+        console.error('Ошибка загрузки пользователей:', err);
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 24px; color: var(--danger);">Ошибка связи при загрузке пользователей</td></tr>`;
     }
 }
 
-async function updateUserRole(userId, newRole) {
+// Алиас для обратной совместимости
+function loadUsers() {
+    loadUsersTable();
+}
+
+async function changeUserRole(userId, newRole, username) {
     try {
         const res = await fetch(`/api/users/update-role/${userId}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ role: newRole })
         });
-        if (res.ok) {
-            loadUsers();
+        const data = await res.json();
+        if (res.ok && data.success) {
+            loadAuditLogs();
+            loadUsersTable();
         } else {
-            alert('Не удалось изменить роль');
+            alert(data.error || 'Не удалось изменить роль');
+            loadUsersTable();
         }
     } catch (err) {
-        alert('Ошибка: ' + err);
+        alert('Ошибка связи с сервером при смене роли: ' + err);
+        loadUsersTable();
     }
 }
 

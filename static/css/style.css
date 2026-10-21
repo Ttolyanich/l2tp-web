@@ -1025,6 +1025,38 @@ html.layout-fullwidth body .main-container {
     box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
 }
 
+/* Стили бейджей действий аудита (Audit Actions) */
+.log-action {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+.log-action.success {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.log-action.fail {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.log-action.revoke {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.log-action.info {
+    background-color: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid var(--border-color);
+}
+
 .hidden {
     display: none !important;
 }
@@ -1326,7 +1358,8 @@ html.layout-fullwidth body .main-container {
 }
 
 /* Кнопка-иконка переключения темы */
-.btn-icon-toggle {
+.btn-icon-toggle,
+.btn-icon-subtle {
     background: transparent;
     border: 1px solid var(--border-color);
     color: var(--text-muted);
@@ -1341,7 +1374,8 @@ html.layout-fullwidth body .main-container {
     padding: 0;
 }
 
-.btn-icon-toggle:hover {
+.btn-icon-toggle:hover,
+.btn-icon-subtle:hover {
     color: var(--text-main);
     background-color: rgba(255, 255, 255, 0.04);
     border-color: var(--border-hover);
@@ -1352,8 +1386,41 @@ html.layout-fullwidth body .main-container {
     height: 18px;
 }
 
-.light-theme .btn-icon-toggle:hover {
+.light-theme .btn-icon-toggle:hover,
+.btn-icon-subtle:hover {
     background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Стили бейджей действий аудита (Audit Actions) */
+.log-action {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+.log-action.success {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.log-action.fail {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.log-action.revoke {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.log-action.info {
+    background-color: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid var(--border-color);
 }
 
 .hidden {
