@@ -5,10 +5,11 @@ import sqlite3
 import time
 import secrets
 import string
+import socket
 import requests
 from datetime import datetime
 from functools import wraps
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_file
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, abort
 from dotenv import load_dotenv
 
 from l2tp_manager import L2TPManager
@@ -17,35 +18,85 @@ from l2tp_manager import L2TPManager
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "l2tp-web-super-secret-key-change-in-production")
 
-# Global Configuration
+# Config loading exactly as in openvpn-web
+CONFIG_PATH = os.getenv("L2TP_WEB_CONFIG", "/app/data/config.json")
 config = {
-    "node_name": os.getenv("NODE_NAME", "L2TP-Gateway-1"),
-    "auth_mode": os.getenv("AUTH_MODE", "standalone").lower().strip(), # standalone | central | ad
-    "central_auth_url": os.getenv("CENTRAL_AUTH_URL", "http://127.0.0.1:5001"),
-    "node_api_token": os.getenv("NODE_API_TOKEN", "default-token"),
-    "verify_ssl": os.getenv("VERIFY_SSL", "false").lower() in ("true", "1", "yes"),
-    "standalone_admin_user": os.getenv("STANDALONE_ADMIN_USER", "admin"),
-    "standalone_admin_password": os.getenv("STANDALONE_ADMIN_PASSWORD", "admin123"),
-    "admin_users": [u.strip().lower() for u in os.getenv("ADMIN_USERS", "admin").split(",") if u.strip()],
-    "admin_group": os.getenv("ADMIN_GROUP", "VPN_Admins"),
+    "auth_mode": "central", # "central" (SSO / CA) or "standalone"
+    "standalone_admin_user": "admin",
+    "standalone_admin_password": "admin123",
+    "secret_key": "default-secret-key-32-chars-long-please-change",
+    "central_auth_url": "http://127.0.0.1:5001",
+    "node_api_token": "default-token",
+    "node_name": os.getenv("NODE_NAME", socket.gethostname()),
+    "bind_host": "0.0.0.0",
+    "bind_port": 5000,
+    "verify_ssl": False,
     "public_ip": os.getenv("PUBLIC_IP", ""),
     "ip_pool_start": os.getenv("IP_POOL_START", "10.18.15.1"),
     "ip_pool_end": os.getenv("IP_POOL_END", "10.18.15.254"),
     "local_tunnel_ip": os.getenv("LOCAL_TUNNEL_IP", "10.18.12.1"),
     "database_path": os.getenv("DATABASE_PATH", "/app/data/node.db"),
-    # Direct AD/LDAP settings
-    "ldap_server": os.getenv("LDAP_SERVER", ""),
-    "ldap_port": int(os.getenv("LDAP_PORT", "389")),
-    "ldap_use_ssl": os.getenv("LDAP_USE_SSL", "false").lower() in ("true", "1", "yes"),
-    "ldap_base_dn": os.getenv("LDAP_BASE_DN", ""),
-    "ldap_bind_user": os.getenv("LDAP_BIND_USER", ""),
-    "ldap_bind_password": os.getenv("LDAP_BIND_PASSWORD", ""),
-    "ldap_user_filter": os.getenv("LDAP_USER_FILTER", "(&(objectClass=user)(sAMAccountName={username}))"),
+    "admin_users": [],
+    "admin_group": "VPN_Admins"
 }
 
-# Auto-detect public IP if not set
+if os.path.exists(CONFIG_PATH):
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            file_config = json.load(f)
+            if "bind_port" in file_config:
+                file_config["bind_port"] = int(file_config["bind_port"])
+            if "verify_ssl" in file_config:
+                if isinstance(file_config["verify_ssl"], str):
+                    file_config["verify_ssl"] = file_config["verify_ssl"].lower() == "true"
+            config.update(file_config)
+    except Exception as e:
+        print(f"Error loading config: {e}")
+
+# Support environment variables (.env / Docker)
+if os.getenv("AUTH_MODE"):
+    config["auth_mode"] = os.getenv("AUTH_MODE").lower().strip()
+if os.getenv("STANDALONE_ADMIN_USER"):
+    config["standalone_admin_user"] = os.getenv("STANDALONE_ADMIN_USER").strip()
+if os.getenv("STANDALONE_ADMIN_PASSWORD"):
+    config["standalone_admin_password"] = os.getenv("STANDALONE_ADMIN_PASSWORD")
+if os.getenv("SECRET_KEY"):
+    config["secret_key"] = os.getenv("SECRET_KEY")
+if os.getenv("CENTRAL_AUTH_URL"):
+    config["central_auth_url"] = os.getenv("CENTRAL_AUTH_URL")
+if os.getenv("NODE_API_TOKEN"):
+    config["node_api_token"] = os.getenv("NODE_API_TOKEN")
+if os.getenv("NODE_NAME"):
+    config["node_name"] = os.getenv("NODE_NAME")
+if os.getenv("BIND_HOST"):
+    config["bind_host"] = os.getenv("BIND_HOST")
+if os.getenv("BIND_PORT"):
+    config["bind_port"] = int(os.getenv("BIND_PORT"))
+if os.getenv("VERIFY_SSL"):
+    config["verify_ssl"] = os.getenv("VERIFY_SSL").lower() in ("true", "1", "yes")
+
+# Admin users list from .env
+admin_users_raw = os.getenv("ADMIN_USERS") or os.getenv("L2TP_ADMIN_USERS") or ""
+if admin_users_raw:
+    config["admin_users"] = [u.strip().lower() for u in admin_users_raw.split(",") if u.strip()]
+elif isinstance(config.get("admin_users"), str):
+    config["admin_users"] = [u.strip().lower() for u in config["admin_users"].split(",") if u.strip()]
+elif isinstance(config.get("admin_users"), list):
+    config["admin_users"] = [str(u).strip().lower() for u in config["admin_users"] if str(u).strip()]
+
+if os.getenv("ADMIN_GROUP"):
+    config["admin_group"] = os.getenv("ADMIN_GROUP").strip()
+elif os.getenv("L2TP_ADMIN_GROUP"):
+    config["admin_group"] = os.getenv("L2TP_ADMIN_GROUP").strip()
+
+# Auto-generate secret_key if default or empty
+if config.get("secret_key") == "default-secret-key-32-chars-long-please-change" or not config.get("secret_key"):
+    config["secret_key"] = secrets.token_hex(16)
+
+app.secret_key = config["secret_key"]
+
+# Auto-detect public IP if not explicitly set
 if not config["public_ip"]:
     try:
         r = requests.get("https://api.ipify.org", timeout=3)
@@ -85,16 +136,16 @@ def init_db():
         )
     ''')
 
-    # Users table (Web Admin RBAC)
+    # Users table (Web Admin RBAC - matching openvpn-web)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             role TEXT NOT NULL DEFAULT 'operator',
             display_name TEXT,
-            auth_source TEXT NOT NULL DEFAULT 'standalone',
-            last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            auth_source TEXT NOT NULL DEFAULT 'central',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -127,7 +178,7 @@ def init_db():
 init_db()
 
 # ==============================================================================
-# Helper Functions: RBAC, Audit, Rate Limiting
+# Helpers: RBAC, Audit, Rate Limiting (copied from openvpn-web)
 # ==============================================================================
 def log_action(username, action, details):
     try:
@@ -158,56 +209,80 @@ def login_rate_limited(ip):
     return count >= LOGIN_MAX_ATTEMPTS
 
 def register_failed_login(ip):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO rate_limits (rate_key, attempt_time) VALUES (?, ?)", (ip, time.time()))
-    conn.commit()
-    conn.close()
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO rate_limits (rate_key, attempt_time) VALUES (?, ?)", (ip, time.time()))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Register failed login error: {e}")
 
-def sync_user(username, central_role="operator", display_name=None, auth_source="standalone"):
+def sync_node_user(username, central_role="operator", display_name=None, auth_source="central"):
+    """
+    Синхронизирует и кеширует пользователя в таблице users в node.db (по аналогии с openvpn-web).
+    Определяет роль: 'admin' или 'operator'.
+    Если пользователь указан в ADMIN_USERS (включая вариант без @domain),
+    он гарантированно получает роль 'admin'.
+    """
+    if not username:
+        return "operator"
     clean_user = username.strip()
     short_login = clean_user.split('@')[0].split('\\')[-1].strip().lower()
-    is_explicit_admin = (clean_user.lower() in config["admin_users"] or short_login in config["admin_users"])
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, role FROM users WHERE LOWER(username) = ? OR LOWER(username) = ?", (clean_user.lower(), short_login))
-    row = cursor.fetchone()
+    admin_users_all = set()
+    for u in config.get("admin_users", []):
+        u_clean = u.strip().lower()
+        if u_clean:
+            admin_users_all.add(u_clean)
+            if "@" in u_clean:
+                admin_users_all.add(u_clean.split("@")[0])
+            elif "\\" in u_clean:
+                admin_users_all.add(u_clean.split("\\")[-1])
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    is_explicit_admin = (clean_user.lower() in admin_users_all or short_login in admin_users_all)
     disp_name = display_name or clean_user
 
-    if not row:
-        initial_role = "admin" if (is_explicit_admin or central_role == "admin") else central_role
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO users (username, role, display_name, auth_source, last_login) VALUES (?, ?, ?, ?, ?)",
-            (clean_user, initial_role, disp_name, auth_source, now_str)
+            "SELECT id, username, role, display_name FROM users WHERE LOWER(username) IN (?, ?)",
+            (clean_user.lower(), short_login)
         )
-        conn.commit()
-        conn.close()
-        return initial_role
-    else:
-        user_id, current_role = row[0], row[1]
-        effective_role = "admin" if is_explicit_admin else current_role
-        cursor.execute(
-            "UPDATE users SET role = ?, display_name = ?, last_login = ? WHERE id = ?",
-            (effective_role, disp_name, now_str, user_id)
-        )
-        conn.commit()
+        existing = cursor.fetchone()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if not existing:
+            initial_role = "admin" if (is_explicit_admin or central_role == "admin") else "operator"
+            cursor.execute(
+                "INSERT INTO users (username, role, display_name, auth_source, last_login) VALUES (?, ?, ?, ?, ?)",
+                (clean_user, initial_role, disp_name, auth_source, now_str)
+            )
+            conn.commit()
+            effective_role = initial_role
+        else:
+            effective_role = existing['role']
+            if is_explicit_admin:
+                effective_role = "admin"
+            cursor.execute(
+                "UPDATE users SET role = ?, display_name = ?, last_login = ? WHERE id = ?",
+                (effective_role, disp_name or existing['display_name'], now_str, existing['id'])
+            )
+            conn.commit()
         conn.close()
         return effective_role
-
-def generate_secure_password(length=16):
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*()_+-="
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+    except Exception as e:
+        print(f"User sync error: {e}")
+        return "operator"
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("logged_in"):
-            if request.path.startswith("/api/"):
-                return jsonify({"error": "Требуется авторизация"}), 401
-            return redirect(url_for("login"))
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({"error": "Unauthorized"}), 401
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -215,62 +290,22 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("logged_in"):
-            return jsonify({"error": "Требуется авторизация"}), 401
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({"error": "Unauthorized"}), 401
+            return redirect(url_for('login'))
         if session.get("role") != "admin":
-            return jsonify({"error": "Доступ запрещен. Требуются права Администратора."}), 403
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({"error": "Forbidden: Требуются права Администратора"}), 403
+            abort(403)
         return f(*args, **kwargs)
     return decorated_function
 
-# ==============================================================================
-# Active Directory / LDAP Authentication Helper
-# ==============================================================================
-def authenticate_ad(username, password):
-    """Authenticates against Active Directory / LDAP directly using ldap3."""
-    if not config["ldap_server"] or not config["ldap_base_dn"]:
-        return False, "LDAP server not configured", "operator", username
-
-    try:
-        from ldap3 import Server, Connection, ALL, NTLM, SUBTREE
-        server = Server(
-            config["ldap_server"],
-            port=config["ldap_port"],
-            use_ssl=config["ldap_use_ssl"],
-            get_info=ALL
-        )
-        
-        # User login format (UserPrincipalName or sAMAccountName)
-        login_user = username
-        if "@" not in username and "\\" not in username and config.get("ldap_domain"):
-            login_user = f"{username}@{config['ldap_domain']}"
-
-        conn = Connection(server, user=login_user, password=password, auto_bind=True)
-        if conn.bound:
-            # Query user attributes and groups
-            user_filter = config["ldap_user_filter"].format(username=username.split('@')[0].split('\\')[-1])
-            conn.search(config["ldap_base_dn"], user_filter, SUBTREE, attributes=['displayName', 'memberOf', 'mail'])
-            
-            role = "operator"
-            disp_name = username
-            if conn.entries:
-                entry = conn.entries[0]
-                disp_name = str(entry.displayName) if hasattr(entry, 'displayName') and entry.displayName else username
-                # Check admin group membership
-                if hasattr(entry, 'memberOf') and entry.memberOf:
-                    admin_grp = config["admin_group"].lower()
-                    for grp in entry.memberOf:
-                        if admin_grp in str(grp).lower():
-                            role = "admin"
-                            break
-
-            conn.unbind()
-            return True, "Success", role, disp_name
-        else:
-            return False, "Invalid credentials", "operator", username
-    except Exception as e:
-        return False, f"LDAP error: {e}", "operator", username
+def generate_secure_password(length=16):
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*()_+-="
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 # ==============================================================================
-# Web Routes: Views
+# Web Views & Authentication (Copied exactly from openvpn-web)
 # ==============================================================================
 @app.route('/')
 @login_required
@@ -282,63 +317,43 @@ def index():
         display_name=session.get("display_name"),
         role=session.get("role"),
         public_ip=config["public_ip"],
-        auth_mode=config["auth_mode"]
+        auth_mode=config.get("auth_mode", "central")
     )
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'GET':
-        if session.get("logged_in"):
-            return redirect(url_for('index'))
-        return render_template('login.html', node_name=config["node_name"], auth_mode=config["auth_mode"])
+    if request.method == 'POST':
+        data = request.json or {}
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
 
-    data = request.json or {}
-    username = data.get('username', '').strip()
-    password = data.get('password', '')
+        if not username or not password:
+            return jsonify({"error": "Заполните все поля"}), 400
 
-    if not username or not password:
-        return jsonify({"error": "Заполните все поля"}), 400
+        if login_rate_limited(request.remote_addr):
+            return jsonify({"error": "Слишком много неудачных попыток входа. Попробуйте через 5 минут."}), 429
 
-    if login_rate_limited(request.remote_addr):
-        return jsonify({"error": "Слишком много неудачных попыток входа. Попробуйте через 5 минут."}), 429
+        auth_mode = config.get("auth_mode", "central")
 
-    auth_mode = config["auth_mode"]
+        # 1. Автономный режим (standalone)
+        if auth_mode == "standalone":
+            admin_user = config.get("standalone_admin_user", "admin")
+            admin_pass = config.get("standalone_admin_password", "admin123")
+            if username == admin_user and password == admin_pass:
+                effective_role = sync_node_user(username, "admin", "Локальный Администратор", "standalone")
+                session["logged_in"] = True
+                session["username"] = username
+                session["role"] = effective_role
+                session["display_name"] = "Локальный Администратор"
+                session["auth_mode"] = "standalone"
+                log_action(username, "LOGIN", f"Успешный автономный вход ({effective_role})")
+                return jsonify({"success": True})
+            else:
+                register_failed_login(request.remote_addr)
+                log_action(username, "LOGIN_FAILED", "Неверный логин или пароль (Standalone)")
+                return jsonify({"error": "Неверный логин или пароль"}), 401
 
-    # 1. Standalone Authentication
-    if auth_mode == "standalone":
-        if username == config["standalone_admin_user"] and password == config["standalone_admin_password"]:
-            role = sync_user(username, "admin", "Локальный Администратор", "standalone")
-            session["logged_in"] = True
-            session["username"] = username
-            session["role"] = role
-            session["display_name"] = "Локальный Администратор"
-            session["auth_mode"] = "standalone"
-            log_action(username, "LOGIN", f"Успешный автономный вход ({role})")
-            return jsonify({"success": True})
-        else:
-            register_failed_login(request.remote_addr)
-            log_action(username, "LOGIN_FAILED", "Неверный логин или пароль (Standalone)")
-            return jsonify({"error": "Неверный логин или пароль"}), 401
-
-    # 2. Direct Active Directory / LDAP Authentication
-    elif auth_mode == "ad":
-        success, msg, ad_role, disp_name = authenticate_ad(username, password)
-        if success:
-            role = sync_user(username, ad_role, disp_name, "ad")
-            session["logged_in"] = True
-            session["username"] = username
-            session["role"] = role
-            session["display_name"] = disp_name
-            session["auth_mode"] = "ad"
-            log_action(username, "LOGIN", f"Успешный вход через Active Directory ({role})")
-            return jsonify({"success": True})
-        else:
-            register_failed_login(request.remote_addr)
-            log_action(username, "LOGIN_FAILED", f"Ошибка входа AD: {msg}")
-            return jsonify({"error": "Неверный логин или пароль Active Directory"}), 401
-
-    # 3. Centralized Auth (SSO with centralized-auth / CA)
-    else:
+        # 2. Централизованный режим (centralized-auth / CA)
         central_url = f"{config['central_auth_url'].rstrip('/')}/api/auth/verify"
         try:
             resp = requests.post(
@@ -346,22 +361,23 @@ def login():
                 json={"username": username, "password": password},
                 headers={"X-Node-Token": config["node_api_token"]},
                 timeout=5,
-                verify=config["verify_ssl"]
+                verify=config.get("verify_ssl", False)
             )
             if resp.status_code == 200:
                 res_data = resp.json()
                 if res_data.get("success"):
                     c_role = res_data.get("role", "operator")
                     disp_name = res_data.get("display_name") or res_data.get("full_name") or username
-                    role = sync_user(res_data.get("username", username), c_role, disp_name, "central")
+                    effective_role = sync_node_user(res_data.get("username", username), c_role, disp_name, "central")
                     session["logged_in"] = True
                     session["username"] = res_data.get("username", username)
-                    session["role"] = role
+                    session["role"] = effective_role
                     session["display_name"] = disp_name
                     session["auth_mode"] = "central"
-                    log_action(username, "LOGIN", f"Успешный вход через Central Auth ({role})")
+                    session["last_verified"] = time.time()
+                    log_action(username, "LOGIN", f"Успешный вход через Central Auth ({effective_role})")
                     return jsonify({"success": True})
-            
+
             error_msg = "Неверный логин или пароль"
             if resp.status_code != 200:
                 try:
@@ -369,16 +385,22 @@ def login():
                 except Exception:
                     pass
             register_failed_login(request.remote_addr)
-            log_action(username or "unknown", "LOGIN_FAILED", f"Неудачная попытка входа Central: {error_msg}")
+            log_action(username or "unknown", "LOGIN_FAILED", f"Неудачная попытка входа: {error_msg}")
             return jsonify({"error": error_msg}), resp.status_code or 401
         except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Центральный сервер авторизации недоступен: {e}"}), 503
+            print(f"Central auth connection error: {e}")
+            return jsonify({"error": "Центральный сервер авторизации недоступен"}), 503
+
+    return render_template('login.html', node_name=config["node_name"], auth_mode=config.get("auth_mode", "central"))
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    user = session.get("username")
-    log_action(user, "LOGOUT", "Пользователь вышел из системы")
-    session.clear()
+    username = session.get("username", "unknown")
+    log_action(username, "LOGOUT", "Выход из системы")
+    session.pop("logged_in", None)
+    session.pop("username", None)
+    session.pop("role", None)
+    session.pop("display_name", None)
     return jsonify({"success": True})
 
 # ==============================================================================
@@ -393,7 +415,6 @@ def get_clients():
     rows = cursor.fetchall()
     conn.close()
 
-    # Get real-time active PPP sessions
     active_sessions = manager.get_active_sessions()
 
     clients_list = []
@@ -401,7 +422,7 @@ def get_clients():
         ip = r["assigned_ip"]
         is_online = ip in active_sessions
         session_info = active_sessions.get(ip, {})
-        
+
         clients_list.append({
             "id": r["id"],
             "username": r["username"],
@@ -445,11 +466,9 @@ def create_client():
     if not username:
         return jsonify({"error": "Имя учетной записи (логин) обязательно"}), 400
 
-    # Auto-generate password if empty
     if not password:
         password = generate_secure_password()
 
-    # Auto-assign next free IP if not specified
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT assigned_ip FROM clients")
@@ -472,7 +491,6 @@ def create_client():
         )
         conn.commit()
 
-        # Fetch all clients to sync chap-secrets
         cursor.execute("SELECT username, password, assigned_ip, description, enabled FROM clients")
         all_clients = [dict(r) for r in cursor.fetchall()]
         conn.close()
@@ -534,7 +552,6 @@ def update_client():
             )
         conn.commit()
 
-        # If IP changed, disconnect previous tunnel
         if old_ip != assigned_ip:
             manager.disconnect_peer(old_ip)
 
@@ -570,7 +587,6 @@ def toggle_client():
     conn.commit()
 
     if not new_state:
-        # Client disabled: disconnect immediately
         manager.disconnect_peer(row["assigned_ip"])
 
     cursor.execute("SELECT username, password, assigned_ip, description, enabled FROM clients")
@@ -604,7 +620,6 @@ def delete_client():
     cursor.execute("DELETE FROM clients WHERE id = ?", (client_id,))
     conn.commit()
 
-    # Disconnect active tunnel if alive
     manager.disconnect_peer(peer_ip)
 
     cursor.execute("SELECT username, password, assigned_ip, description, enabled FROM clients")
@@ -654,7 +669,7 @@ def get_credentials(username):
         "synology_guide": {
             "step1": "Откройте Панель управления Synology DSM -> Сеть -> Сетевой интерфейс.",
             "step2": "Нажмите Создать -> Создать профиль VPN -> Выберите L2TP/IPSec.",
-            "step3": f"Имя профиля: VPN-Zabbix | Адрес сервера: {pub_ip} | Имя пользователя: {row['username']} | Пароль: {row['password']} | Общий ключ (Pre-shared key): {psk}",
+            "step3": f"Имя профиля: VPN-Zabbix | Адрес сервера: {pub_ip} | Имя пользователя: {row['username']} | Пароль: {row['password']} | Общий ключ: {psk}",
             "step4": "В Дополнительных параметрах убедитесь, что снята галочка «Использовать шлюз удаленной сети» (чтобы локальный интернет офиса не шел через VPN)."
         }
     })
@@ -705,7 +720,7 @@ def restart_services():
     return jsonify({"success": success, "message": msg})
 
 # ==============================================================================
-# API Routes: Audit Logs & User RBAC
+# API Routes: Audit Logs & User RBAC (Copied exactly from openvpn-web)
 # ==============================================================================
 @app.route('/api/audit', methods=['GET'])
 @login_required
@@ -748,7 +763,7 @@ def update_user_role(user_id):
 # Main Entry Point
 # ==============================================================================
 if __name__ == '__main__':
-    port = int(os.getenv("BIND_PORT", os.getenv("PORT", 5000)))
-    host = os.getenv("BIND_HOST", "0.0.0.0")
+    port = config.get("bind_port", 5000)
+    host = config.get("bind_host", "0.0.0.0")
     print(f"Starting l2tp-web on {host}:{port} in {config['auth_mode'].upper()} mode...")
     app.run(host=host, port=port, debug=False)

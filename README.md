@@ -2,17 +2,16 @@
 
 **L2TP Web Hub** — современная легковесная веб-панель управления сервером **L2TP/IPsec (Libreswan + xl2tpd + PPP)**, упакованная в единый Docker-контейнер. Спроектирована специально для централизованного выпуска и администрирования учетных записей удаленных устройств (включая парк **Synology NAS**, роутеры MikroTik и рабочие станции) с жесткой привязкой статических IP-адресов под опрос **Zabbix / SNMP**.
 
-Архитектура проекта и интерфейс полностью повторяют концепцию и стандарты [openvpn-web](https://github.com/Ttolyanich/openvpn-web) и [centralized-auth](https://github.com/Ttolyanich/centralized-auth).
+Архитектура проекта, схема авторизации и интерфейс полностью повторяют концепцию и стандарты [openvpn-web](https://github.com/Ttolyanich/openvpn-web) и [centralized-auth](https://github.com/Ttolyanich/centralized-auth).
 
 ---
 
 ## 🌟 Основные возможности
 
 * **All-in-One Docker контейнер**: Libreswan (IPsec IKEv1/NAT-T), xl2tpd, pppd, фаервол iptables и веб-панель работают в едином оптимизированном окружении.
-* **Три режима авторизации администраторов (AUTH_MODE)**:
-  1. `standalone`: Локальный администратор с логином/паролем из `.env`.
-  2. `central`: Интеграция с централизованным сервером SSO / CA ([centralized-auth](https://github.com/Ttolyanich/centralized-auth)) с поддержкой ролей `admin`, `operator`, `viewer`.
-  3. `ad`: Прямая аутентификация в **Active Directory / LDAP** через учетные записи домена с проверкой членства в группе (`VPN_Admins`).
+* **Два режима авторизации администраторов (AUTH_MODE) — скопировано с OpenVPN Web**:
+  1. `central` (по умолчанию): Авторизация через центральный сервер **centralized-auth (SSO / CA)** с ролевым доступом (`admin`, `operator`, `viewer`) и поддержкой групп (`ADMIN_GROUP`). Вся аутентификация домена/пользователей делегируется CA.
+  2. `standalone`: Автономный запуск с локальной учетной записью администратора (`STANDALONE_ADMIN_USER` / `STANDALONE_ADMIN_PASSWORD`).
 * **Управление клиентами и учетными записями в Web UI**:
   - Создание клиентов в один клик с автогенерацией надежного пароля.
   - Автоматическое выделение следующего свободного статического IP из пула (`10.18.15.1 – 10.18.15.254`).
@@ -75,7 +74,7 @@ cp .env.example .env
 nano .env
 ```
 
-Минимальные параметры для проверки:
+Пример `.env`:
 ```env
 BIND_HOST=0.0.0.0
 BIND_PORT=5000
@@ -83,10 +82,17 @@ NODE_NAME=L2TP-Gateway-1
 PUBLIC_IP=10.18.9.190
 L2TP_IPSEC_PSK=L2tP(L2tB)Gbylf2019!
 
-AUTH_MODE=standalone
-STANDALONE_ADMIN_USER=admin
-STANDALONE_ADMIN_PASSWORD=StrongPassword123
-SECRET_KEY=generate-with-openssl-rand-hex-16
+# Режим авторизации (как в openvpn-web):
+AUTH_MODE=central
+CENTRAL_AUTH_URL=http://host.docker.internal:5001
+NODE_API_TOKEN=default-token-change-me-please
+ADMIN_USERS=admin,operator_lead
+ADMIN_GROUP=VPN_Admins
+
+# Для автономного запуска:
+# AUTH_MODE=standalone
+# STANDALONE_ADMIN_USER=admin
+# STANDALONE_ADMIN_PASSWORD=admin123
 ```
 
 ### 3. Запуск контейнера
@@ -98,18 +104,10 @@ docker compose up -d --build
 
 ---
 
-## 🔐 Варианты авторизации администраторов (AUTH_MODE)
+## 🔐 Авторизация администраторов (AUTH_MODE)
 
-### 1. Автономный режим (`AUTH_MODE=standalone`)
-Подходит для изолированных серверов. Использует локальную учетную запись администратора:
-```env
-AUTH_MODE=standalone
-STANDALONE_ADMIN_USER=admin
-STANDALONE_ADMIN_PASSWORD=admin123
-```
-
-### 2. Централизованный режим (`AUTH_MODE=central`)
-Интеграция с [centralized-auth](https://github.com/Ttolyanich/centralized-auth) (Single Sign-On):
+### 1. Централизованный режим (`AUTH_MODE=central`) — Основной
+Авторизация делегируется центральному сервису [centralized-auth](https://github.com/Ttolyanich/centralized-auth) (Single Sign-On / CA):
 ```env
 AUTH_MODE=central
 CENTRAL_AUTH_URL=https://auth.company.local:5001
@@ -119,17 +117,12 @@ ADMIN_USERS=admin,a.ivanov
 ADMIN_GROUP=VPN_Admins
 ```
 
-### 3. Active Directory / LDAP (`AUTH_MODE=ad`)
-Прямое подключение к контроллеру домена без промежуточных серверов:
+### 2. Автономный режим (`AUTH_MODE=standalone`)
+Подходит для изолированных серверов с локальной учетной записью:
 ```env
-AUTH_MODE=ad
-LDAP_SERVER=ldap://dc1.company.local
-LDAP_PORT=389
-LDAP_BASE_DN=DC=company,DC=local
-LDAP_BIND_USER=CN=ldap_svc,OU=ServiceAccounts,DC=company,DC=local
-LDAP_BIND_PASSWORD=SvcPassword123
-ADMIN_GROUP=VPN_Admins
-ADMIN_USERS=admin,a.ivanov
+AUTH_MODE=standalone
+STANDALONE_ADMIN_USER=admin
+STANDALONE_ADMIN_PASSWORD=admin123
 ```
 
 ---
@@ -187,7 +180,7 @@ l2tp-web/
 │   └── iptables_rules
 ├── static/                    # CSS, палитры оформления и JS SPA
 ├── templates/                 # Шаблоны Jinja2 (dashboard, login, navbar)
-└── requirements.txt           # Зависимости Python
+└── requirements.txt           # Зависимости Python (Flask, requests, gunicorn, etc.)
 ```
 
 ---
