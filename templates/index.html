@@ -536,20 +536,26 @@
                         <h3 style="font-size: 15px; font-weight: 700; margin-top: 0; margin-bottom: 16px;">Состояние компонентов</h3>
                         
                         <div style="display: flex; flex-direction: column; gap: 16px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                                <div>
-                                    <div style="font-weight: 600;">Libreswan IPsec (Pluto)</div>
-                                    <div style="font-size: 12px; color: var(--text-muted);">IKEv1 / NAT-Traversal (UDP 500, 4500)</div>
+                            <div style="padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-weight: 600;">Libreswan IPsec (Pluto)</div>
+                                        <div style="font-size: 12px; color: var(--text-muted);">IKEv1 / NAT-Traversal (UDP 500, 4500)</div>
+                                    </div>
+                                    <span class="service-status-badge status-active" id="svcPlutoBadge">АКТИВЕН</span>
                                 </div>
-                                <span class="service-status-badge status-active" id="svcPlutoBadge">АКТИВЕН</span>
+                                <div id="plutoErrorAlert" class="hidden" style="margin-top: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #f87171; font-family: 'JetBrains Mono', monospace; word-break: break-all;"></div>
                             </div>
 
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                                <div>
-                                    <div style="font-weight: 600;">L2TP Daemon (xl2tpd)</div>
-                                    <div style="font-size: 12px; color: var(--text-muted);">Координатор сессий туннелей (UDP 1701)</div>
+                            <div style="padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-weight: 600;">L2TP Daemon (xl2tpd)</div>
+                                        <div style="font-size: 12px; color: var(--text-muted);">Координатор сессий туннелей (UDP 1701)</div>
+                                    </div>
+                                    <span class="service-status-badge status-active" id="svcXl2tpdBadge">АКТИВЕН</span>
                                 </div>
-                                <span class="service-status-badge status-active" id="svcXl2tpdBadge">АКТИВЕН</span>
+                                <div id="xl2tpdErrorAlert" class="hidden" style="margin-top: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #f87171; font-family: 'JetBrains Mono', monospace; word-break: break-all;"></div>
                             </div>
 
                             <div style="display: flex; justify-content: space-between; align-items: center;">

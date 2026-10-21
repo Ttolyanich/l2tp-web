@@ -25,8 +25,8 @@ class L2TPManager:
     def get_service_statuses(self):
         """Check status of Pluto (Libreswan/IPsec), xl2tpd, and Web API."""
         status = {
-            "ipsec": {"running": False, "pid": None, "name": "Libreswan IPsec (Pluto)"},
-            "xl2tpd": {"running": False, "pid": None, "name": "Layer 2 Tunnelling Protocol (xl2tpd)"},
+            "ipsec": {"running": False, "pid": None, "name": "Libreswan IPsec (Pluto)", "error": None},
+            "xl2tpd": {"running": False, "pid": None, "name": "Layer 2 Tunnelling Protocol (xl2tpd)", "error": None},
             "iptables": {"configured": False, "name": "NAT / MSS Clamping Firewall"}
         }
 
@@ -42,6 +42,33 @@ class L2TPManager:
             if os.path.exists("/run/pluto/pluto.ctl") or os.path.exists("/var/run/pluto/pluto.ctl"):
                 status["ipsec"]["running"] = True
 
+        if not status["ipsec"]["running"]:
+            error_msg = ""
+            for log_file in ["/var/log/pluto.log", "/var/log/pluto_err.log"]:
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                            lines = [l.strip() for l in f.readlines() if l.strip()]
+                            err_lines = [l for l in lines[-20:] if any(k in l.lower() for k in ["fatal", "error", "abort", "failed", "cannot", "address already in use", "syntax error"])]
+                            if err_lines:
+                                error_msg = err_lines[-1]
+                            elif lines:
+                                error_msg = lines[-1]
+                    except Exception:
+                        pass
+                if error_msg:
+                    break
+
+            if not error_msg:
+                try:
+                    res = subprocess.run(["ipsec", "addconn", "--config", self.ipsec_conf_path, "--checkconfig"], capture_output=True, text=True, timeout=5)
+                    if res.returncode != 0:
+                        error_msg = res.stderr.strip() or res.stdout.strip()
+                except Exception:
+                    pass
+
+            status["ipsec"]["error"] = error_msg or "Процесс Pluto остановлен (exit status 1)"
+
         # Check xl2tpd
         try:
             out = subprocess.check_output(["pgrep", "-f", "xl2tpd"], text=True).strip()
@@ -52,6 +79,21 @@ class L2TPManager:
         except Exception:
             if os.path.exists("/var/run/xl2tpd/l2tp-control"):
                 status["xl2tpd"]["running"] = True
+
+        if not status["xl2tpd"]["running"]:
+            error_msg = ""
+            for log_file in ["/var/log/xl2tpd_err.log", "/var/log/xl2tpd.log"]:
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                            lines = [l.strip() for l in f.readlines() if l.strip()]
+                            if lines:
+                                error_msg = lines[-1]
+                    except Exception:
+                        pass
+                if error_msg:
+                    break
+            status["xl2tpd"]["error"] = error_msg or "xl2tpd остановлен"
 
         # Check iptables forward/mss rule presence
         try:
@@ -390,10 +432,10 @@ class L2TPManager:
         results = []
         # Try supervisorctl if running inside docker container
         try:
-            res = subprocess.run(["supervisorctl", "restart", "all"], capture_output=True, text=True, timeout=10)
+            res = subprocess.run(["supervisorctl", "restart", "pluto", "xl2tpd"], capture_output=True, text=True, timeout=10)
             if res.returncode == 0:
-                return True, "Services successfully restarted via supervisor"
-            results.append(f"supervisor: {res.stderr}")
+                return True, "Службы IPsec и xl2tpd успешно перезапущены"
+            results.append(f"supervisor: {res.stderr or res.stdout}")
         except Exception as e:
             results.append(f"supervisor error: {e}")
 

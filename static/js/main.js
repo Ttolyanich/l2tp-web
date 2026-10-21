@@ -747,14 +747,35 @@ async function loadServiceStatus(silent = false) {
                 mobileDot.className = isAllOk ? 'status-indicator-dot online' : 'status-indicator-dot offline';
             }
 
+            const plutoErrEl = document.getElementById('plutoErrorAlert');
+            const xl2tpdErrEl = document.getElementById('xl2tpdErrorAlert');
+
             if (plutoEl) {
                 plutoEl.className = s.ipsec.running ? 'service-status-badge status-active' : 'service-status-badge status-stopped';
                 plutoEl.textContent = s.ipsec.running ? 'АКТИВЕН' : 'ОСТАНОВЛЕН';
             }
+            if (plutoErrEl) {
+                if (!s.ipsec.running && s.ipsec.error) {
+                    plutoErrEl.textContent = 'Ошибка Pluto: ' + s.ipsec.error;
+                    plutoErrEl.classList.remove('hidden');
+                } else {
+                    plutoErrEl.classList.add('hidden');
+                }
+            }
+
             if (xl2tpdEl) {
                 xl2tpdEl.className = s.xl2tpd.running ? 'service-status-badge status-active' : 'service-status-badge status-stopped';
                 xl2tpdEl.textContent = s.xl2tpd.running ? 'АКТИВЕН' : 'ОСТАНОВЛЕН';
             }
+            if (xl2tpdErrEl) {
+                if (!s.xl2tpd.running && s.xl2tpd.error) {
+                    xl2tpdErrEl.textContent = 'Ошибка xl2tpd: ' + s.xl2tpd.error;
+                    xl2tpdErrEl.classList.remove('hidden');
+                } else {
+                    xl2tpdErrEl.classList.add('hidden');
+                }
+            }
+
             if (iptablesEl) {
                 iptablesEl.className = s.iptables.configured ? 'service-status-badge status-active' : 'service-status-badge status-stopped';
                 iptablesEl.textContent = s.iptables.configured ? 'АКТИВЕН' : 'НЕ НАСТРОЕН';
