@@ -551,7 +551,130 @@ html.layout-fullwidth body .main-container {
     text-align: center;
 }
 
-/* Кнопки */
+/* Кнопки и расширения */
+.btn-submit, .btn.submit, .btn-primary {
+    background-color: var(--accent);
+    color: var(--accent-contrast, #141416);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: inherit;
+    text-decoration: none;
+}
+
+.btn-submit:hover, .btn.submit:hover, .btn-primary:hover {
+    background-color: var(--accent-hover);
+    color: var(--accent-contrast, #141416);
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.btn-submit.wide, .btn.submit.wide, .btn-primary.w-full {
+    width: 100%;
+}
+
+.btn-secondary {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: inherit;
+    text-decoration: none;
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-offset);
+    border-color: var(--border-hover);
+    color: var(--text-main);
+}
+
+.config-tab-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+}
+
+.config-tab-btn:hover {
+    color: var(--text-main);
+    background: var(--bg-card);
+}
+
+.config-tab-btn.active {
+    color: var(--accent);
+    background: var(--bg-card);
+    border-color: var(--border-color);
+    font-weight: 600;
+}
+
+.filter-pill {
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.filter-pill:hover {
+    color: var(--text-main);
+    border-color: var(--border-hover);
+}
+
+.filter-pill.active {
+    background: var(--accent);
+    color: var(--accent-contrast, #141416);
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.light-theme .btn-primary {
+    background-color: var(--accent);
+    color: var(--accent-contrast, #ffffff);
+    border: 1px solid var(--accent);
+}
+
+.btn-action-icon {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: var(--text-main);
+}
+.btn-action-icon:hover {
+    background: var(--bg-offset);
+    border-color: var(--border-hover);
+}
+
+/* Старые кнопки */
 .btn-submit {
     background-color: var(--accent);
     color: var(--accent-contrast, #141416);

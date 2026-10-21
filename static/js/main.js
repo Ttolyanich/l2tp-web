@@ -246,11 +246,11 @@ function renderClientsTable() {
                 </td>
                 <td class="text-right">
                     <div style="display: inline-flex; gap: 6px; justify-content: flex-end;">
-                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px;" title="Реквизиты и памятка DSM" onclick="showCredentials('${escapeHtml(c.username)}')">🔑</button>
-                        ${c.online ? `<button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px; color: var(--warning);" title="Сбросить туннель" onclick="disconnectTunnel('${escapeHtml(c.assigned_ip)}')">⚡</button>` : ''}
-                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px;" title="Редактировать" onclick="editClient(${c.id})">✏️</button>
-                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px;" title="${c.enabled ? 'Отключить' : 'Включить'}" onclick="toggleClient(${c.id})">${c.enabled ? '⏸️' : '▶️'}</button>
-                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px; color: var(--danger);" title="Удалить" onclick="deleteClient(${c.id}, '${escapeHtml(c.username)}')">🗑️</button>
+                        <button type="button" class="btn-action-icon" title="Реквизиты и памятка DSM" onclick="showCredentials('${escapeHtml(c.username)}')">🔑</button>
+                        ${c.online ? `<button type="button" class="btn-action-icon" style="color: var(--warning);" title="Сбросить туннель" onclick="disconnectTunnel('${escapeHtml(c.assigned_ip)}')">⚡</button>` : ''}
+                        <button type="button" class="btn-action-icon" title="Редактировать" onclick="editClient(${c.id})">✏️</button>
+                        <button type="button" class="btn-action-icon" title="${c.enabled ? 'Отключить' : 'Включить'}" onclick="toggleClient(${c.id})">${c.enabled ? '⏸️' : '▶️'}</button>
+                        <button type="button" class="btn-action-icon" style="color: var(--danger);" title="Удалить" onclick="deleteClient(${c.id}, '${escapeHtml(c.username)}')">🗑️</button>
                     </div>
                 </td>
             </tr>
