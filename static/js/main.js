@@ -1,14 +1,16 @@
 // ==============================================================================
-// L2TP Web Hub — Frontend Application Logic
+// L2TP Web Hub — Frontend Application Logic (Styled exactly as OpenVPN Web)
 // ==============================================================================
 
 let allClients = [];
-let currentFilter = 'all';
+let currentTab = 'clients';
 let activeConfigKey = 'ipsec.conf';
 
 document.addEventListener('DOMContentLoaded', () => {
+    initThemeAndUI();
     loadClients();
     loadServiceStatus();
+
     // Auto-refresh stats and clients every 8 seconds
     setInterval(() => {
         loadClients(true);
@@ -17,35 +19,139 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==============================================================================
-// Tab Navigation
+// Theme, Palette & Layout Switchers (from OpenVPN Web)
 // ==============================================================================
-function switchTab(tabId, el) {
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+function initThemeAndUI() {
+    // Theme toggle
+    const themeToggleBtn = document.getElementById('theme-toggle');
+    if (themeToggleBtn) {
+        const sunIcon = themeToggleBtn.querySelector('.sun-icon');
+        const moonIcon = themeToggleBtn.querySelector('.moon-icon');
 
-    const targetTab = document.getElementById(`tab-${tabId}`);
-    if (targetTab) {
-        targetTab.classList.add('active');
-    }
-    if (el) {
-        el.classList.add('active');
+        if (document.documentElement.classList.contains('light-theme')) {
+            if (sunIcon) sunIcon.classList.add('hidden');
+            if (moonIcon) moonIcon.classList.remove('hidden');
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            document.documentElement.classList.toggle('light-theme');
+            const isLight = document.documentElement.classList.contains('light-theme');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            if (isLight) {
+                if (sunIcon) sunIcon.classList.add('hidden');
+                if (moonIcon) moonIcon.classList.remove('hidden');
+            } else {
+                if (sunIcon) sunIcon.classList.remove('hidden');
+                if (moonIcon) moonIcon.classList.add('hidden');
+            }
+        });
     }
 
-    if (tabId === 'configs') {
+    // Palette picker
+    const toggleBtn = document.getElementById('palette-toggle-btn');
+    const menu = document.getElementById('paletteMenu');
+    if (toggleBtn && menu) {
+        const savedPalette = localStorage.getItem('theme_palette') || 'classic';
+        menu.querySelectorAll('.palette-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.paletteVal === savedPalette);
+            btn.addEventListener('click', () => {
+                const palette = btn.dataset.paletteVal;
+                document.documentElement.setAttribute('data-palette', palette);
+                localStorage.setItem('theme_palette', palette);
+                menu.querySelectorAll('.palette-option').forEach(b => b.classList.toggle('active', b === btn));
+                menu.classList.add('hidden');
+            });
+        });
+
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!menu.contains(e.target) && !toggleBtn.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+    }
+
+    // Layout toggle (Full width vs 1440px)
+    const layoutToggle = document.getElementById('layout-toggle');
+    if (layoutToggle) {
+        const expandIcon = layoutToggle.querySelector('.expand-icon');
+        const compressIcon = layoutToggle.querySelector('.compress-icon');
+
+        function updateLayoutIcons(isFull) {
+            if (isFull) {
+                layoutToggle.title = 'Компактный вид';
+                if (expandIcon) expandIcon.classList.add('hidden');
+                if (compressIcon) compressIcon.classList.remove('hidden');
+            } else {
+                layoutToggle.title = 'На всю ширину (100%)';
+                if (expandIcon) expandIcon.classList.remove('hidden');
+                if (compressIcon) compressIcon.classList.add('hidden');
+            }
+        }
+
+        const isFullInitial = localStorage.getItem('layout_width') === 'full';
+        updateLayoutIcons(isFullInitial);
+
+        layoutToggle.addEventListener('click', () => {
+            const isFull = document.documentElement.classList.toggle('layout-fullwidth');
+            localStorage.setItem('layout_width', isFull ? 'full' : 'compact');
+            updateLayoutIcons(isFull);
+        });
+    }
+}
+
+// ==============================================================================
+// Tab Navigation (matches OpenVPN Web switchNavTab)
+// ==============================================================================
+function switchNavTab(tabName) {
+    currentTab = tabName;
+    toggleMobileSidebar(false);
+
+    // Sidebar nav buttons
+    const navClientsBtn = document.getElementById('navClientsBtn');
+    const navAuditBtn = document.getElementById('navAuditBtn');
+    const navServicesBtn = document.getElementById('navServicesBtn');
+    const navServerConfigBtn = document.getElementById('navServerConfigBtn');
+    const navUsersBtn = document.getElementById('navUsersBtn');
+
+    if (navClientsBtn) navClientsBtn.classList.toggle('active', tabName === 'clients');
+    if (navAuditBtn) navAuditBtn.classList.toggle('active', tabName === 'audit');
+    if (navServicesBtn) navServicesBtn.classList.toggle('active', tabName === 'services');
+    if (navServerConfigBtn) navServerConfigBtn.classList.toggle('active', tabName === 'server-config');
+    if (navUsersBtn) navUsersBtn.classList.toggle('active', tabName === 'users');
+
+    // Tab sections (using .hidden)
+    const clientsSec = document.getElementById('tabSectionClients');
+    const auditSec = document.getElementById('tabSectionAudit');
+    const servicesSec = document.getElementById('tabSectionServices');
+    const serverConfigSec = document.getElementById('tabSectionServerConfig');
+    const usersSec = document.getElementById('tabSectionUsers');
+
+    if (clientsSec) clientsSec.classList.toggle('hidden', tabName !== 'clients');
+    if (auditSec) auditSec.classList.toggle('hidden', tabName !== 'audit');
+    if (servicesSec) servicesSec.classList.toggle('hidden', tabName !== 'services');
+    if (serverConfigSec) serverConfigSec.classList.toggle('hidden', tabName !== 'server-config');
+    if (usersSec) usersSec.classList.toggle('hidden', tabName !== 'users');
+
+    if (tabName === 'server-config') {
         loadConfigFile(activeConfigKey);
-    } else if (tabId === 'audit') {
+    } else if (tabName === 'audit') {
         loadAuditLogs();
-    } else if (tabId === 'users') {
+    } else if (tabName === 'users') {
         loadUsers();
-    } else if (tabId === 'services') {
+    } else if (tabName === 'services') {
         loadServiceStatus();
     }
-    toggleMobileSidebar(false);
 }
 
 function toggleMobileSidebar(show) {
     const sidebar = document.getElementById('sidebarNav');
     const backdrop = document.getElementById('mobileBackdrop');
+    if (!sidebar || !backdrop) return;
     if (show) {
         sidebar.classList.add('open');
         backdrop.classList.add('open');
@@ -76,10 +182,13 @@ function updateClientStats() {
     const total = allClients.length;
     const online = allClients.filter(c => c.online).length;
 
-    document.getElementById('statTotalClients').textContent = total;
-    document.getElementById('statOnlineClients').textContent = online;
-    const badge = document.getElementById('sidebarOnlineBadge');
-    if (badge) badge.textContent = online;
+    const elTotal = document.getElementById('statTotalClients');
+    const elOnline = document.getElementById('statOnlineClients');
+    const elBadge = document.getElementById('clientCounterBadge');
+
+    if (elTotal) elTotal.textContent = total;
+    if (elOnline) elOnline.textContent = online;
+    if (elBadge) elBadge.textContent = `${total} клиентов (${online} онлайн)`;
 }
 
 function formatBytes(bytes) {
@@ -92,15 +201,12 @@ function formatBytes(bytes) {
 
 function renderClientsTable() {
     const tbody = document.getElementById('clientsTableBody');
-    const searchVal = document.getElementById('clientSearchInput').value.toLowerCase().trim();
+    if (!tbody) return;
+
+    const searchInput = document.getElementById('searchInput');
+    const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
     let filtered = allClients.filter(c => {
-        // Status filter
-        if (currentFilter === 'online' && !c.online) return false;
-        if (currentFilter === 'offline' && c.online) return false;
-        if (currentFilter === 'disabled' && c.enabled) return false;
-
-        // Search text
         if (searchVal) {
             const matchUser = c.username.toLowerCase().includes(searchVal);
             const matchDesc = (c.description || '').toLowerCase().includes(searchVal);
@@ -127,36 +233,29 @@ function renderClientsTable() {
             <tr>
                 <td>${statusHtml}</td>
                 <td>
-                    <strong>${escapeHtml(c.username)}</strong>
-                    ${c.device_type === 'synology' ? '<span class="badge-tag">Synology</span>' : ''}
+                    <strong style="font-size: 14px;">${escapeHtml(c.username)}</strong>
+                    ${c.device_type === 'synology' ? '<span class="badge-role" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Synology</span>' : ''}
                 </td>
-                <td><span class="text-muted">${escapeHtml(c.description || '—')}</span></td>
-                <td><code class="ip-code">${escapeHtml(c.assigned_ip)}</code></td>
-                <td><span class="text-muted" style="font-size: 12px;">${c.online ? c.interface : '—'}</span></td>
+                <td><span style="color: var(--text-muted); font-size: 13px;">${escapeHtml(c.description || '—')}</span></td>
+                <td><code style="background: var(--bg-offset); padding: 3px 6px; border-radius: 4px; font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-main);">${escapeHtml(c.assigned_ip)}</code></td>
+                <td><span style="color: var(--text-muted); font-size: 12px; font-family: 'JetBrains Mono', monospace;">${c.online ? c.interface : '—'}</span></td>
                 <td>
-                    <span style="font-size: 12px; font-family: monospace;">
-                        <span class="text-success">&darr; ${rxFormatted}</span> / <span class="text-info">&uarr; ${txFormatted}</span>
+                    <span style="font-size: 12px; font-family: 'JetBrains Mono', monospace;">
+                        <span style="color: var(--success);">&darr; ${rxFormatted}</span> / <span style="color: var(--info);">&uarr; ${txFormatted}</span>
                     </span>
                 </td>
-                <td style="text-align: right;">
-                    <div class="action-buttons-wrap">
-                        <button class="btn-action-icon" title="Реквизиты и памятка DSM" onclick="showCredentials('${escapeHtml(c.username)}')">🔑</button>
-                        ${c.online ? `<button class="btn-action-icon text-warning" title="Сбросить туннель" onclick="disconnectTunnel('${escapeHtml(c.assigned_ip)}')">⚡</button>` : ''}
-                        <button class="btn-action-icon" title="Редактировать" onclick="editClient(${c.id})">✏️</button>
-                        <button class="btn-action-icon" title="${c.enabled ? 'Отключить' : 'Включить'}" onclick="toggleClient(${c.id})">${c.enabled ? '⏸️' : '▶️'}</button>
-                        <button class="btn-action-icon text-danger" title="Удалить" onclick="deleteClient(${c.id}, '${escapeHtml(c.username)}')">🗑️</button>
+                <td class="text-right">
+                    <div style="display: inline-flex; gap: 6px; justify-content: flex-end;">
+                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px;" title="Реквизиты и памятка DSM" onclick="showCredentials('${escapeHtml(c.username)}')">🔑</button>
+                        ${c.online ? `<button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px; color: var(--warning);" title="Сбросить туннель" onclick="disconnectTunnel('${escapeHtml(c.assigned_ip)}')">⚡</button>` : ''}
+                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px;" title="Редактировать" onclick="editClient(${c.id})">✏️</button>
+                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px;" title="${c.enabled ? 'Отключить' : 'Включить'}" onclick="toggleClient(${c.id})">${c.enabled ? '⏸️' : '▶️'}</button>
+                        <button type="button" class="btn-service-restart" style="width: auto; padding: 4px 8px; font-size: 12px; color: var(--danger);" title="Удалить" onclick="deleteClient(${c.id}, '${escapeHtml(c.username)}')">🗑️</button>
                     </div>
                 </td>
             </tr>
         `;
     }).join('');
-}
-
-function setFilter(filterType, btn) {
-    currentFilter = filterType;
-    document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    renderClientsTable();
 }
 
 function filterClients() {
@@ -174,7 +273,7 @@ function openCreateClientModal() {
     document.getElementById('clientDescription').value = '';
     document.getElementById('clientDeviceType').value = 'synology';
     document.getElementById('clientPassword').value = '';
-    
+
     fetchNextIp();
     document.getElementById('clientModal').classList.remove('hidden');
 }
@@ -211,7 +310,7 @@ function editClient(id) {
     document.getElementById('editClientId').value = client.id;
     document.getElementById('clientModalTitle').textContent = `Редактировать: ${client.username}`;
     document.getElementById('clientUsername').value = client.username;
-    document.getElementById('clientUsername').disabled = true; // username cannot change
+    document.getElementById('clientUsername').disabled = true;
     document.getElementById('clientDescription').value = client.description || '';
     document.getElementById('clientDeviceType').value = client.device_type || 'synology';
     document.getElementById('clientAssignedIp').value = client.assigned_ip || '';
@@ -255,7 +354,7 @@ async function handleClientSubmit(e) {
             alert(data.error || 'Ошибка при сохранении данных клиента');
         }
     } catch (err) {
-        alert('Ошибка сети или сервера: ' + err);
+        alert('Ошибка связи с сервером: ' + err);
     } finally {
         saveBtn.disabled = false;
     }
@@ -293,7 +392,7 @@ async function deleteClient(id, username) {
             alert(data.error || 'Ошибка при удалении');
         }
     } catch (err) {
-        alert('Ошибка удаления клиента: ' + err);
+        alert('Ошибка удаления: ' + err);
     }
 }
 
@@ -338,7 +437,7 @@ async function showCredentials(username) {
             alert(data.error || 'Клиент не найден');
         }
     } catch (err) {
-        alert('Ошибка получения реквизитов: ' + err);
+        alert('Ошибка получения данных: ' + err);
     }
 }
 
@@ -349,7 +448,7 @@ function closeCredentialsModal() {
 function copyText(elemId) {
     const text = document.getElementById(elemId).textContent;
     navigator.clipboard.writeText(text);
-    alert('Скопировано в буфер обмена: ' + text);
+    alert('Скопировано: ' + text);
 }
 
 function copyAllCredentials() {
@@ -367,18 +466,25 @@ function copyAllCredentials() {
 Важно: В свойствах подключения Synology DSM снимите галочку "Использовать шлюз удаленной сети".`;
 
     navigator.clipboard.writeText(text);
-    alert('Все реквизиты и инструкция скопированы в буфер обмена!');
+    alert('Все реквизиты скопированы в буфер обмена!');
 }
 
 // ==============================================================================
 // Config Editor
 // ==============================================================================
-async function loadConfigFile(key, btn) {
+async function loadConfigFile(key) {
     activeConfigKey = key;
-    document.querySelectorAll('.config-tab-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
+    ['ipsec_conf', 'l2tp_secrets', 'xl2tpd_conf', 'options_xl2tpd', 'iptables_rules'].forEach(id => {
+        const btn = document.getElementById(`tabBtn_${id}`);
+        if (btn) btn.classList.remove('active');
+    });
+
+    const activeBtnKey = key.replace('.', '_');
+    const activeBtn = document.getElementById(`tabBtn_${activeBtnKey}`);
+    if (activeBtn) activeBtn.classList.add('active');
 
     const textarea = document.getElementById('configEditorTextarea');
+    if (!textarea) return;
     textarea.value = 'Загрузка...';
 
     try {
@@ -390,13 +496,13 @@ async function loadConfigFile(key, btn) {
             textarea.value = `# Ошибка: ${data.error}`;
         }
     } catch (err) {
-        textarea.value = `# Ошибка связи с сервером: ${err}`;
+        textarea.value = `# Ошибка связи: ${err}`;
     }
 }
 
 async function saveActiveConfig() {
     const content = document.getElementById('configEditorTextarea').value;
-    if (!confirm(`Сохранить изменения в ${activeConfigKey}? Резервная копия будет создана автоматически.`)) {
+    if (!confirm(`Сохранить изменения в ${activeConfigKey}? Автоматически будет создан бэкап.`)) {
         return;
     }
 
@@ -408,7 +514,7 @@ async function saveActiveConfig() {
         });
         const data = await res.json();
         if (res.ok && data.success) {
-            alert(`Файл ${activeConfigKey} успешно сохранен.`);
+            alert(`Файл ${activeConfigKey} успешно сохранен!`);
         } else {
             alert(data.error || 'Ошибка при сохранении конфигурации');
         }
@@ -429,15 +535,31 @@ async function loadServiceStatus(silent = false) {
             const plutoEl = document.getElementById('svcPlutoBadge');
             const xl2tpdEl = document.getElementById('svcXl2tpdBadge');
             const iptablesEl = document.getElementById('svcIptablesBadge');
+            const indicatorEl = document.getElementById('serviceIndicator');
+            const mobileDot = document.getElementById('mobileServiceStatusDot');
 
-            if (plutoEl) plutoEl.className = s.ipsec.running ? 'badge-running' : 'badge-stopped';
-            if (plutoEl) plutoEl.textContent = s.ipsec.running ? 'АКТИВЕН' : 'ОСТАНОВЛЕН';
+            const isAllOk = s.ipsec.running && s.xl2tpd.running;
 
-            if (xl2tpdEl) xl2tpdEl.className = s.xl2tpd.running ? 'badge-running' : 'badge-stopped';
-            if (xl2tpdEl) xl2tpdEl.textContent = s.xl2tpd.running ? 'АКТИВЕН' : 'ОСТАНОВЛЕН';
+            if (indicatorEl) {
+                indicatorEl.className = isAllOk ? 'service-status-badge status-active' : 'service-status-badge status-loading';
+                indicatorEl.textContent = isAllOk ? 'IPsec / L2TP Онлайн' : 'Службы не готовы';
+            }
+            if (mobileDot) {
+                mobileDot.className = isAllOk ? 'status-indicator-dot online' : 'status-indicator-dot offline';
+            }
 
-            if (iptablesEl) iptablesEl.className = s.iptables.configured ? 'badge-running' : 'badge-warning';
-            if (iptablesEl) iptablesEl.textContent = s.iptables.configured ? 'АКТИВЕН' : 'НЕ НАСТРОЕН';
+            if (plutoEl) {
+                plutoEl.className = s.ipsec.running ? 'service-status-badge status-active' : 'service-status-badge status-stopped';
+                plutoEl.textContent = s.ipsec.running ? 'АКТИВЕН' : 'ОСТАНОВЛЕН';
+            }
+            if (xl2tpdEl) {
+                xl2tpdEl.className = s.xl2tpd.running ? 'service-status-badge status-active' : 'service-status-badge status-stopped';
+                xl2tpdEl.textContent = s.xl2tpd.running ? 'АКТИВЕН' : 'ОСТАНОВЛЕН';
+            }
+            if (iptablesEl) {
+                iptablesEl.className = s.iptables.configured ? 'service-status-badge status-active' : 'service-status-badge status-stopped';
+                iptablesEl.textContent = s.iptables.configured ? 'АКТИВЕН' : 'НЕ НАСТРОЕН';
+            }
         }
     } catch (err) {
         if (!silent) console.error('Failed to load service status:', err);
@@ -445,7 +567,7 @@ async function loadServiceStatus(silent = false) {
 }
 
 async function restartServicesBtn() {
-    if (!confirm('Перезапустить службы IPsec (Libreswan) и xl2tpd? Активные туннели кратковременно переподключатся.')) {
+    if (!confirm('Перезапустить службы IPsec (Libreswan) и xl2tpd? Туннели кратковременно переподключатся.')) {
         return;
     }
 
@@ -468,35 +590,36 @@ async function restartServicesBtn() {
 // ==============================================================================
 async function loadAuditLogs() {
     const tbody = document.getElementById('auditTableBody');
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 24px;">Загрузка...</td></tr>`;
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка...</td></tr>`;
 
     try {
         const res = await fetch('/api/audit');
         const data = await res.json();
         if (res.ok && data.logs) {
             if (data.logs.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 24px;">Журнал пуст</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="padding: 24px; color: var(--text-muted);">Журнал пуст</td></tr>`;
                 return;
             }
             tbody.innerHTML = data.logs.map(l => `
                 <tr>
-                    <td style="font-size: 12px; font-family: monospace;">${escapeHtml(l.timestamp)}</td>
+                    <td style="font-size: 12px; font-family: 'JetBrains Mono', monospace;">${escapeHtml(l.timestamp)}</td>
                     <td><strong>${escapeHtml(l.username)}</strong></td>
-                    <td><span class="badge-tag">${escapeHtml(l.action)}</span></td>
+                    <td><span class="badge-role" style="font-size: 11px;">${escapeHtml(l.action)}</span></td>
                     <td>${escapeHtml(l.details || '—')}</td>
-                    <td><code class="ip-code">${escapeHtml(l.ip_address || '—')}</code></td>
+                    <td><code style="font-size: 12px;">${escapeHtml(l.ip_address || '—')}</code></td>
                 </tr>
             `).join('');
         }
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-danger">Ошибка загрузки журнала: ${err}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="color: var(--danger);">Ошибка загрузки: ${err}</td></tr>`;
     }
 }
 
 async function loadUsers() {
     const tbody = document.getElementById('usersTableBody');
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 24px;">Загрузка...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 24px; color: var(--text-muted);">Загрузка...</td></tr>`;
 
     try {
         const res = await fetch('/api/users');
@@ -507,11 +630,11 @@ async function loadUsers() {
                     <td>${u.id}</td>
                     <td><strong>${escapeHtml(u.username)}</strong></td>
                     <td>${escapeHtml(u.display_name || '—')}</td>
-                    <td><span class="badge-tag">${escapeHtml(u.auth_source)}</span></td>
-                    <td><span class="user-role badge-${u.role}">${u.role}</span></td>
-                    <td><span style="font-size: 12px;">${escapeHtml(u.last_login || '—')}</span></td>
-                    <td style="text-align: right;">
-                        <select onchange="updateUserRole(${u.id}, this.value)" class="form-control" style="width: auto; display: inline-block; padding: 4px 8px; font-size: 12px;">
+                    <td><span class="badge-source">${escapeHtml(u.auth_source)}</span></td>
+                    <td><span class="badge-role badge-role-${u.role}">${u.role}</span></td>
+                    <td style="font-size: 12px;">${escapeHtml(u.last_login || '—')}</td>
+                    <td class="text-right">
+                        <select onchange="updateUserRole(${u.id}, this.value)" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 6px; font-size: 12px;">
                             <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
                             <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>operator</option>
                             <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>viewer</option>
@@ -521,7 +644,7 @@ async function loadUsers() {
             `).join('');
         }
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-danger">Ошибка: ${err}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="color: var(--danger);">Ошибка: ${err}</td></tr>`;
     }
 }
 
@@ -573,7 +696,6 @@ async function processImportSecrets() {
             continue;
         }
 
-        // Format: client server secret IP
         const parts = line.split(/\s+/);
         if (parts.length >= 3) {
             const username = parts[0];
@@ -588,7 +710,7 @@ async function processImportSecrets() {
                         username,
                         password: secret,
                         assigned_ip: ip,
-                        description: lastComment || 'Импортировано со старого сервера',
+                        description: lastComment || 'Импортировано',
                         device_type: username.toLowerCase().includes('synology') || username.toLowerCase().includes('nas') ? 'synology' : 'generic'
                     })
                 });
@@ -599,12 +721,12 @@ async function processImportSecrets() {
         }
     }
 
-    alert(`Успешно обработан импорт! Добавлено учетных записей: ${imported}`);
+    alert(`Импорт завершен! Добавлено: ${imported}`);
     closeImportModal();
     loadClients();
 }
 
-async function logout() {
+async function handleLogout() {
     try {
         await fetch('/logout', { method: 'POST' });
         window.location.href = '/login';

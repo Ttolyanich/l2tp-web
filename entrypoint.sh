@@ -7,7 +7,10 @@ echo "=================================================="
 
 DATA_DIR="${DATA_DIR:-/app/data}"
 mkdir -p "$DATA_DIR"
-mkdir -p /etc/ppp /etc/xl2tpd /etc/ipsec.d /var/run/xl2tpd /run/pluto /var/log
+mkdir -p /etc/ppp /etc/xl2tpd /etc/ipsec.d /var/run/xl2tpd /run/pluto /var/run/pluto /var/lib/ipsec/nss /var/log
+
+# Clean up any leftover PID or control socket files
+rm -f /run/pluto/pluto.pid /run/pluto/pluto.ctl /var/run/pluto/pluto.pid /var/run/pluto/pluto.ctl /var/run/xl2tpd/l2tp-control
 
 # 1. Ensure /dev/ppp device exists for pppd
 if [ ! -c /dev/ppp ]; then
@@ -67,16 +70,17 @@ if [ ! -d /var/lib/ipsec/nss ] || [ ! -f /var/lib/ipsec/nss/cert9.db ]; then
     ipsec initnss || true
 fi
 
+ipsec --checknss || true
+ipsec --checknflog || true
+
 # 5. Apply Firewall & NAT rules
 echo "Applying iptables rules..."
-# TCPMSS Clamping to 1300 for ppp interfaces to prevent fragmentation
 iptables -t filter -C FORWARD -i ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss 1300 2>/dev/null || \
 iptables -t filter -A FORWARD -i ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss 1300 || true
 
 iptables -t filter -C FORWARD -o ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss 1300 2>/dev/null || \
 iptables -t filter -A FORWARD -o ppp+ -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss --mss 1301:65535 -j TCPMSS --set-mss 1300 || true
 
-# Masquerade for Zabbix subnet (10.18.8.0/22) querying Synology pool (10.18.12.0/22)
 iptables -t nat -C POSTROUTING -s 10.18.8.0/22 -d 10.18.12.0/22 -j MASQUERADE 2>/dev/null || \
 iptables -t nat -A POSTROUTING -s 10.18.8.0/22 -d 10.18.12.0/22 -j MASQUERADE || true
 
