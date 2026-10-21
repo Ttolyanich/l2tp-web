@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ node_name }} — Вход в систему</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzBiOTgxZiI+PHBhdGggZD0iTTEyIDJMNCA1djZjMCA1LjU1IDMuODQgMTAuNzQgOSAxMiA1LjE2LTEuMjYgOS02LjQ1IDktMTJWNWwtOC0zem0tMiAxMmwtNC00IDEuNDEtMS40MUwxMCAxMS4xTDE3LjU5IDMuNWwxLjQxIDEuNDEtOSA5eiIvPjwvc3ZnPg==" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        if (savedTheme === 'light') {
+            document.documentElement.classList.add('light-theme');
+        }
+        const savedPalette = localStorage.getItem('theme_palette') || 'classic';
+        document.documentElement.setAttribute('data-palette', savedPalette);
+    </script>
+</head>
+<body class="login-body">
+
+    <div style="position: absolute; top: 24px; right: 24px; display: flex; gap: 8px; align-items: center;">
+        <button id="themeToggleBtn" class="btn-icon-toggle" title="Переключить тему" onclick="toggleTheme()">
+            <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+        </button>
+    </div>
+
+    <div class="login-card">
+        <div class="login-header">
+            <div class="logo-box-large">L2TP</div>
+            <h2>{{ node_name }}</h2>
+            <p class="subtitle">Панель управления VPN и учетными записями</p>
+            <div class="auth-mode-pill">
+                {% if auth_mode == 'central' %}
+                <span class="badge-central">Централизованная авторизация (SSO / CA)</span>
+                {% elif auth_mode == 'ad' %}
+                <span class="badge-ad">Active Directory / LDAP</span>
+                {% else %}
+                <span class="badge-standalone">Автономный режим (Standalone)</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div id="loginAlert" class="alert-box error hidden"></div>
+
+            <div class="form-group">
+                <label for="username">Имя пользователя / Логин</label>
+                <input type="text" id="username" name="username" class="form-control" placeholder="admin или username@domain" required autofocus autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" name="password" class="form-control" placeholder="••••••••••••" required autocomplete="current-password">
+            </div>
+
+            <button type="submit" id="loginBtn" class="btn-primary w-full">
+                <span>Войти в панель</span>
+            </button>
+        </form>
+
+        <div class="login-footer">
+            <small>L2TP/IPsec Hub &copy; 2026. Разработано для управления парком Synology и удаленными узлами.</small>
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const isLight = document.documentElement.classList.toggle('light-theme');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const alertBox = document.getElementById('loginAlert');
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            alertBox.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = '<span>Проверка учетных данных...</span>';
+
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    window.location.href = '/';
+                } else {
+                    alertBox.textContent = data.error || 'Ошибка входа. Проверьте правильность реквизитов.';
+                    alertBox.classList.remove('hidden');
+                }
+            } catch (err) {
+                alertBox.textContent = 'Ошибка сети или сервер недоступен.';
+                alertBox.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Войти в панель</span>';
+            }
+        }
+    </script>
+</body>
+</html>

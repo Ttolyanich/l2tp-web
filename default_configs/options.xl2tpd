@@ -1,0 +1,22 @@
+require-mschap-v2
+ms-dns 1.1.1.1
+ms-dns 1.0.0.1
+asyncmap 0
+auth
+crtscts
+lock
+hide-password
+modem
+debug
+name L2TP
+proxyarp
+lcp-echo-interval 5
+lcp-echo-failure 10
+lcp-echo-adaptive
+novj
+novjccomp
+nodeflate
+nobsdcomp
+idle 1800
+mtu 1360
+mru 1360

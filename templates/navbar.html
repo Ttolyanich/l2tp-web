@@ -1,0 +1,25 @@
+<nav class="top-navbar">
+    <div class="nav-container">
+        <div class="brand">
+            <span class="logo-box">L</span>
+            <span class="brand-title">L2TP <span class="accent-text">HUB</span></span>
+            <span class="node-badge" title="Имя ноды">{{ node_name }}</span>
+        </div>
+        <div class="nav-right">
+            <span id="serviceStatusBadge" class="status-badge running">
+                <span class="pulse-dot"></span> IPsec / L2TP Онлайн
+            </span>
+            <div class="user-menu">
+                <span class="user-name">{{ display_name or username }}</span>
+                <span class="user-role badge-{{ role }}">{{ role }}</span>
+                <button onclick="logout()" class="btn-logout" title="Выйти">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</nav>
