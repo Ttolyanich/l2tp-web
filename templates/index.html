@@ -299,16 +299,8 @@
                             <span id="clientCounterBadge" class="service-status-badge status-active" style="padding: 2px 8px; font-size: 11px;">0 клиентов</span>
                         </div>
 
-                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                            <div class="search-wrapper">
-                                <input type="text" id="searchInput" oninput="filterClients()" placeholder="Поиск по имени, IP, описанию..." style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 12px; font-size: 13px;">
-                            </div>
-                            <button type="button" class="btn-secondary" onclick="openImportModal()" style="font-size: 13px; padding: 6px 12px;">
-                                📥 Импорт
-                            </button>
-                            <button type="button" class="btn-primary" onclick="openCreateClientModal()" style="font-size: 13px; padding: 6px 14px;">
-                                + Создать клиента
-                            </button>
+                        <div class="search-wrapper">
+                            <input type="text" id="searchInput" oninput="filterClients()" placeholder="Поиск по имени, IP, описанию..." style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 14px; font-size: 13px; min-width: 280px;">
                         </div>
                     </div>
 
@@ -372,9 +364,14 @@
                             <h2 class="header-title uppercase-accent" style="font-size: 16px; font-weight: 700; margin: 0;">Конфигурация сервера L2TP & IPsec</h2>
                             <p class="header-subtitle font-mono" style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">Сетевые параметры, туннель, параметры IPsec, PPP и маршрутизация Zabbix</p>
                         </div>
-                        <button type="button" onclick="loadServerConfigForm()" class="btn-service-restart" style="width: auto; padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Сбросить к текущим настройкам">
-                            ↺ Сбросить
-                        </button>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button type="button" onclick="openImportModal()" class="btn-secondary" style="font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                📥 Импорт клиентов (chap-secrets)
+                            </button>
+                            <button type="button" onclick="loadServerConfigForm()" class="btn-service-restart" style="width: auto; padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Сбросить к текущим настройкам">
+                                ↺ Сбросить
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="card-body" style="display: flex; flex-direction: column; gap: 24px; padding: 24px;">
