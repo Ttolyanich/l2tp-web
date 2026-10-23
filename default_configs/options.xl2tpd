@@ -3,10 +3,7 @@ ms-dns 1.1.1.1
 ms-dns 1.0.0.1
 asyncmap 0
 auth
-crtscts
-lock
 hide-password
-modem
 debug
 name L2TP
 proxyarp
