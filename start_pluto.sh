@@ -11,8 +11,8 @@ mkdir -p /run/pluto /var/lib/ipsec/nss /etc/ipsec.d /var/log
         if [ -S /run/pluto/pluto.ctl ] || [ -S /var/run/pluto/pluto.ctl ]; then
             sleep 1
             ipsec auto --ready 2>/dev/null || true
-            ipsec auto --add L2TP-PSK-NAT 2>/dev/null || ipsec addconn --all 2>/dev/null || true
             ipsec auto --add L2TP-PSK-noNAT 2>/dev/null || true
+            ipsec auto --add L2TP-PSK-NAT 2>/dev/null || ipsec addconn --all 2>/dev/null || true
             echo "[pluto-init] IPsec connections successfully loaded into Pluto."
             break
         fi

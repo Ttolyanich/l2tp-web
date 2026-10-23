@@ -21,8 +21,8 @@ rm -f /run/pluto/pluto.pid /run/pluto/pluto.ctl /var/run/pluto/pluto.pid /var/ru
 if [ ! -c /dev/ppp ]; then
     echo "Creating /dev/ppp character device..."
     mknod /dev/ppp c 108 0 || true
-    chmod 600 /dev/ppp || true
 fi
+chmod 666 /dev/ppp 2>/dev/null || true
 
 # 2. Kernel networking & sysctl parameters
 echo "Applying kernel sysctl parameters..."
@@ -56,7 +56,7 @@ if [ ! -f "$DATA_DIR/iptables_rules" ]; then
     cp /app/default_configs/iptables_rules "$DATA_DIR/iptables_rules"
 fi
 
-# Sanitize existing ipsec.conf if corrupted or having inverted connection order
+# Sanitize existing ipsec.conf if corrupted or missing IKEv1 Libreswan settings
 if [ -f "$DATA_DIR/ipsec.conf" ]; then
     nat_line=$(grep -n "conn L2TP-PSK-NAT" "$DATA_DIR/ipsec.conf" | head -n1 | cut -d: -f1 || echo 0)
     nonat_line=$(grep -n "conn L2TP-PSK-noNAT" "$DATA_DIR/ipsec.conf" | head -n1 | cut -d: -f1 || echo 0)
@@ -65,14 +65,22 @@ if [ -f "$DATA_DIR/ipsec.conf" ]; then
         cp "$DATA_DIR/ipsec.conf" "$DATA_DIR/ipsec.conf.bak"
         cp /app/default_configs/ipsec.conf "$DATA_DIR/ipsec.conf"
     fi
+    if ! grep -q "ikev1-policy" "$DATA_DIR/ipsec.conf"; then
+        echo "Adding ikev1-policy=accept to $DATA_DIR/ipsec.conf..."
+        sed -i '/config setup/a \    ikev1-policy=accept' "$DATA_DIR/ipsec.conf"
+    fi
+    if ! grep -q "ikev2=" "$DATA_DIR/ipsec.conf"; then
+        echo "Adding ikev2=no to $DATA_DIR/ipsec.conf..."
+        sed -i '/conn L2TP-PSK-noNAT/a \    ikev2=no' "$DATA_DIR/ipsec.conf"
+    fi
+    if grep -q "left=%any" "$DATA_DIR/ipsec.conf"; then
+        echo "Updating left=%any to left=%defaultroute in $DATA_DIR/ipsec.conf..."
+        sed -i 's/left=%any/left=%defaultroute/g' "$DATA_DIR/ipsec.conf"
+    fi
     if grep -q "leftnexthop=%defaultroute" "$DATA_DIR/ipsec.conf"; then
         echo "Removing obsolete leftnexthop/rightnexthop from $DATA_DIR/ipsec.conf..."
         sed -i '/leftnexthop=%defaultroute/d' "$DATA_DIR/ipsec.conf"
         sed -i '/rightnexthop=%defaultroute/d' "$DATA_DIR/ipsec.conf"
-    fi
-    if grep -q "left=%defaultroute" "$DATA_DIR/ipsec.conf"; then
-        echo "Updating left=%defaultroute to left=%any in $DATA_DIR/ipsec.conf..."
-        sed -i 's/left=%defaultroute/left=%any/g' "$DATA_DIR/ipsec.conf"
     fi
 fi
 
